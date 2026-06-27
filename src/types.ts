@@ -35,6 +35,7 @@ export interface Lead {
   name: string;
   company: string;
   email: string;
+  phone?: string;
   interactions: number;
   lastActivity: string;
   status: 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';

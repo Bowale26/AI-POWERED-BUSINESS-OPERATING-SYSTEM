@@ -27,6 +27,7 @@ export default function CrmLeadsPipeline() {
   const [newLeadName, setNewLeadName] = useState('');
   const [newLeadCompany, setNewLeadCompany] = useState('');
   const [newLeadEmail, setNewLeadEmail] = useState('');
+  const [newLeadPhone, setNewLeadPhone] = useState('');
   const [newLeadValue, setNewLeadValue] = useState('25000');
   const [newLeadActivity, setNewLeadActivity] = useState('Organic Google Search referral');
 
@@ -40,13 +41,13 @@ export default function CrmLeadsPipeline() {
       });
 
       if (loadedLeads.length === 0) {
-        // Seed default dataset
+        // Seed default dataset with name, email, and phone
         const initialLeads: Lead[] = [
-          { id: '1', name: 'Sarah Jenkins', company: 'Alpha Corp', email: 's.jenkins@alphacorp.com', interactions: 14, lastActivity: 'Downloaded Technical Paper', status: 'qualified', estimatedValue: 45000, score: 92, explanation: 'High technical engagement, matching ICP tier-1 profile with immediate decision timeline.' },
-          { id: '2', name: 'Marcus Chen', company: 'Velo Group', email: 'mchen@velogroup.co', interactions: 8, lastActivity: 'Attended Webinar', status: 'contacted', estimatedValue: 24000, score: 78, explanation: 'Strong interest shown during live Q&A. Growth-focused startup seeking workflow optimization.' },
-          { id: '3', name: 'Darren Vance', company: 'Horizon Logistics', email: 'vance@horizon.io', interactions: 3, lastActivity: 'Website Visit (Pricing)', status: 'new', estimatedValue: 75000, score: 62, explanation: 'High enterprise value potential, but currently low engagement. Needs persistent email drip.' },
-          { id: '4', name: 'Elena Rostova', company: 'Novis Tech', email: 'erostova@novis.tech', interactions: 21, lastActivity: 'Requested Customized Demo', status: 'converted', estimatedValue: 110000, score: 96, explanation: 'Critical decision maker requested sandboxed proof-of-concept. High budget alignment detected.' },
-          { id: '5', name: 'Lucas Thorne', company: 'Nexus Retail', email: 'l.thorne@nexus.com', interactions: 2, lastActivity: 'Bounce on intro email', status: 'lost', estimatedValue: 15000, score: 15, explanation: 'Extremely cold interaction. Bounced inbound mail and non-responsive core contact profile.' }
+          { id: '1', name: 'Sarah Jenkins', company: 'Alpha Corp', email: 's.jenkins@alphacorp.com', phone: '+1 (415) 555-0199', interactions: 14, lastActivity: 'Downloaded Technical Paper', status: 'qualified', estimatedValue: 45000, score: 92, explanation: 'High technical engagement, matching ICP tier-1 profile with immediate decision timeline.' },
+          { id: '2', name: 'Marcus Chen', company: 'Velo Group', email: 'mchen@velogroup.co', phone: '+1 (650) 555-0211', interactions: 8, lastActivity: 'Attended Webinar', status: 'contacted', estimatedValue: 24000, score: 78, explanation: 'Strong interest shown during live Q&A. Growth-focused startup seeking workflow optimization.' },
+          { id: '3', name: 'Darren Vance', company: 'Horizon Logistics', email: 'vance@horizon.io', phone: '+1 (202) 555-0144', interactions: 3, lastActivity: 'Website Visit (Pricing)', status: 'new', estimatedValue: 75000, score: 62, explanation: 'High enterprise value potential, but currently low engagement. Needs persistent email drip.' },
+          { id: '4', name: 'Elena Rostova', company: 'Novis Tech', email: 'erostova@novis.tech', phone: '+44 20 7946 0958', interactions: 21, lastActivity: 'Requested Customized Demo', status: 'converted', estimatedValue: 110000, score: 96, explanation: 'Critical decision maker requested sandboxed proof-of-concept. High budget alignment detected.' },
+          { id: '5', name: 'Lucas Thorne', company: 'Nexus Retail', email: 'l.thorne@nexus.com', phone: '+1 (312) 555-0177', interactions: 2, lastActivity: 'Bounce on intro email', status: 'lost', estimatedValue: 15000, score: 15, explanation: 'Extremely cold interaction. Bounced inbound mail and non-responsive core contact profile.' }
         ];
 
         initialLeads.forEach(async (lead) => {
@@ -117,6 +118,7 @@ export default function CrmLeadsPipeline() {
       name: newLeadName,
       company: newLeadCompany,
       email: newLeadEmail,
+      phone: newLeadPhone || '+1 (555) 000-0000',
       interactions: 1,
       lastActivity: newLeadActivity,
       status: 'new',
@@ -133,6 +135,7 @@ export default function CrmLeadsPipeline() {
       setNewLeadName('');
       setNewLeadCompany('');
       setNewLeadEmail('');
+      setNewLeadPhone('');
       setNewLeadValue('25000');
       setNewLeadActivity('Organic Google Search referral');
       addToast(`Lead "${newLeadName}" successfully registered to Cloud Firestore!`, 'success', 3000);
@@ -180,6 +183,20 @@ export default function CrmLeadsPipeline() {
     } catch (err) {
       console.error(err);
       addToast('Failed to bulk delete leads from Firestore.', 'error', 3000);
+    }
+  };
+
+  const handleDeleteLead = async (leadId: string) => {
+    const confirmed = window.confirm ? window.confirm('Are you sure you want to permanently delete this lead from Cloud Firestore?') : true;
+    if (!confirmed) return;
+
+    try {
+      await deleteDoc(doc(db, 'leads', leadId));
+      addToast('Lead successfully deleted from Cloud Firestore.', 'success', 3000);
+      setSelectedLead(null);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to delete lead from Firestore.', 'error', 3000);
     }
   };
 
@@ -276,6 +293,17 @@ export default function CrmLeadsPipeline() {
                   onChange={(e) => setNewLeadEmail(e.target.value)}
                   className="w-full bg-dark-bg border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
                   placeholder="E.g. j.lawrence@galaxy.com"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Phone Number</label>
+                <input
+                  type="text"
+                  required
+                  value={newLeadPhone}
+                  onChange={(e) => setNewLeadPhone(e.target.value)}
+                  className="w-full bg-dark-bg border border-white/10 rounded px-2 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                  placeholder="E.g. +1 (555) 123-4567"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -436,15 +464,28 @@ export default function CrmLeadsPipeline() {
               <div className="flex justify-between items-start border-b border-white/5 pb-2.5">
                 <div>
                   <h3 className="font-display font-bold text-xs text-white">{selectedLead.name}</h3>
-                  <p className="text-[9px] text-gray-400 mt-0.5">{selectedLead.company} | {selectedLead.email}</p>
+                  <p className="text-[9px] text-gray-400 mt-0.5">{selectedLead.company}</p>
+                  <p className="text-[9px] text-blue-400 mt-0.5 font-mono">{selectedLead.email}</p>
+                  <p className="text-[9px] text-emerald-400 mt-0.5 font-mono">{selectedLead.phone || 'No phone set'}</p>
                 </div>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold ${
-                  selectedLead.status === 'converted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                  selectedLead.status === 'lost' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
-                  selectedLead.status === 'qualified' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-gray-400'
-                }`}>
-                  {selectedLead.status}
-                </span>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold ${
+                    selectedLead.status === 'converted' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                    selectedLead.status === 'lost' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' :
+                    selectedLead.status === 'qualified' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-slate-800 text-gray-400'
+                  }`}>
+                    {selectedLead.status}
+                  </span>
+                  
+                  <button
+                    onClick={() => handleDeleteLead(selectedLead.id)}
+                    className="bg-rose-950/40 hover:bg-rose-900/30 border border-rose-900/40 text-rose-400 p-1 rounded text-[9px] font-mono uppercase cursor-pointer transition-all flex items-center gap-1"
+                    title="Delete this lead"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Delete</span>
+                  </button>
+                </div>
               </div>
 
               {/* Status transition dropdown selector */}

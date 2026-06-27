@@ -9,8 +9,11 @@ import {
   Sliders,
   DollarSign,
   TrendingUp,
-  FileText
+  FileText,
+  Trash2,
+  X
 } from 'lucide-react';
+import { useNotifications } from './NotificationProvider';
 
 interface Prospect {
   id: string;
@@ -20,21 +23,81 @@ interface Prospect {
   domain: string;
   score: number;
   enriched: boolean;
+  email?: string;
+  phone?: string;
 }
 
 export default function ProspectingTool() {
+  const { addToast } = useNotifications();
   const [industry, setIndustry] = useState('Enterprise FinTech');
   const [icp, setIcp] = useState('VPs of Finance, CFOs, Heads of Procurement');
   const [prospects, setProspects] = useState<Prospect[]>([
-    { id: '1', name: 'Jonathan Sterling', title: 'CFO', company: 'Apex Clearing', domain: 'apexclearing.com', score: 88, enriched: false },
-    { id: '2', name: 'Fiona Vance', title: 'VP of Procurement', company: 'PrimeBroker Corp', domain: 'primebroker.io', score: 72, enriched: false },
-    { id: '3', name: 'Gavin Kincaid', title: 'Director of Accounts', company: 'Alpha Settlement', domain: 'alphasettlement.net', score: 45, enriched: false }
+    { id: '1', name: 'Jonathan Sterling', title: 'CFO', company: 'Apex Clearing', domain: 'apexclearing.com', score: 88, enriched: false, email: 'j.sterling@apexclearing.com', phone: '+1 (415) 555-1212' },
+    { id: '2', name: 'Fiona Vance', title: 'VP of Procurement', company: 'PrimeBroker Corp', domain: 'primebroker.io', score: 72, enriched: false, email: 'fiona.v@primebroker.io', phone: '+1 (650) 555-9080' },
+    { id: '3', name: 'Gavin Kincaid', title: 'Director of Accounts', company: 'Alpha Settlement', domain: 'alphasettlement.net', score: 45, enriched: false, email: 'gavin.k@alphasettlement.net', phone: '+1 (202) 555-0394' }
   ]);
 
   const [activeTab, setActiveTab] = useState<'find' | 'enrich' | 'sequence' | 'score'>('find');
   const [isLoading, setIsLoading] = useState(false);
   const [responseText, setResponseText] = useState('');
   const [selectedProspect, setSelectedProspect] = useState<Prospect | null>(null);
+
+  // New Prospect Form States
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newPropName, setNewPropName] = useState('');
+  const [newPropTitle, setNewPropTitle] = useState('');
+  const [newPropCompany, setNewPropCompany] = useState('');
+  const [newPropDomain, setNewPropDomain] = useState('');
+  const [newPropEmail, setNewPropEmail] = useState('');
+  const [newPropPhone, setNewPropPhone] = useState('');
+
+  const handleAddProspect = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPropName || !newPropEmail || !newPropPhone) {
+      addToast('Please fill out name, email, and phone number fields.', 'error', 3000);
+      return;
+    }
+
+    const newProspect: Prospect = {
+      id: `pr-${Date.now()}`,
+      name: newPropName,
+      title: newPropTitle || 'Prospect',
+      company: newPropCompany || 'Self',
+      domain: newPropDomain || 'example.com',
+      score: Math.floor(Math.random() * 40) + 50,
+      enriched: false,
+      email: newPropEmail,
+      phone: newPropPhone
+    };
+
+    setProspects(prev => [...prev, newProspect]);
+    setSelectedProspect(newProspect);
+    setShowAddModal(false);
+
+    // reset fields
+    setNewPropName('');
+    setNewPropTitle('');
+    setNewPropCompany('');
+    setNewPropDomain('');
+    setNewPropEmail('');
+    setNewPropPhone('');
+
+    addToast(`Successfully added prospect "${newProspect.name}" with email & phone!`, 'success', 3000);
+  };
+
+  const handleDeleteProspect = (id: string) => {
+    const p = prospects.find(item => item.id === id);
+    if (!p) return;
+
+    const confirmed = window.confirm ? window.confirm(`Are you sure you want to delete prospect "${p.name}"?`) : true;
+    if (!confirmed) return;
+
+    setProspects(prev => prev.filter(item => item.id !== id));
+    if (selectedProspect?.id === id) {
+      setSelectedProspect(null);
+    }
+    addToast(`Removed prospect "${p.name}" from queue.`, 'info', 2500);
+  };
 
   const handleFindProspects = async () => {
     setIsLoading(true);
@@ -279,7 +342,16 @@ export default function ProspectingTool() {
 
           {/* Prospects list selection */}
           <div className="border-t border-white/5 pt-3.5 space-y-2">
-            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide font-mono">Discovered Contact Queue</h4>
+            <div className="flex justify-between items-center">
+              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-wide font-mono">Discovered Contact Queue</h4>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded px-1.5 py-0.5 text-[9px] font-semibold flex items-center gap-1 transition-all cursor-pointer"
+              >
+                <Plus className="w-3 h-3 text-blue-400" />
+                <span>Add Contact</span>
+              </button>
+            </div>
             <div className="space-y-1.5 max-h-[160px] overflow-y-auto scrollbar-thin">
               {prospects.map((p) => {
                 const isSelected = selectedProspect?.id === p.id;
@@ -287,7 +359,7 @@ export default function ProspectingTool() {
                   <div
                     key={p.id}
                     onClick={() => setSelectedProspect(p)}
-                    className={`p-2 rounded border transition-all cursor-pointer text-left ${
+                    className={`p-2 rounded border transition-all cursor-pointer text-left relative group ${
                       isSelected 
                         ? 'border-brand-primary bg-white/5' 
                         : 'border-white/5 bg-dark-bg/60 hover:border-white/10'
@@ -295,13 +367,22 @@ export default function ProspectingTool() {
                   >
                     <div className="flex justify-between items-center">
                       <p className="text-[10.5px] font-bold text-white truncate">{p.name}</p>
-                      <span className={`text-[8px] font-mono px-1 rounded ${p.enriched ? 'bg-emerald-400/10 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
-                        {p.enriched ? 'Enriched' : 'Unenriched'}
-                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={`text-[8px] font-mono px-1 rounded ${p.enriched ? 'bg-emerald-400/10 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
+                          {p.enriched ? 'Enriched' : 'Unenriched'}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteProspect(p.id); }}
+                          className="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-0.5 rounded transition-opacity cursor-pointer"
+                          title="Delete prospect"
+                        >
+                          <Trash2 className="w-3 h-3 text-rose-500" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex justify-between text-[9px] text-gray-500 mt-0.5 font-mono">
                       <span>{p.title} at {p.company}</span>
-                      <span className="text-amber-400">Score: {p.score}</span>
+                      <span className="text-amber-400 font-mono">Score: {p.score}</span>
                     </div>
                   </div>
                 );
@@ -319,6 +400,28 @@ export default function ProspectingTool() {
                 Active: prospecting_agent
               </span>
             </div>
+
+            {selectedProspect && (
+              <div className="bg-dark-bg border border-brand-primary/30 rounded p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-fadeIn shadow-inner">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-[11px] font-display">{selectedProspect.name}</span>
+                    <span className="text-[9px] text-gray-400">({selectedProspect.title} at {selectedProspect.company})</span>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:gap-4 text-[9px] font-mono text-gray-500 mt-1">
+                    <span>Email: <strong className="text-blue-400">{selectedProspect.email || `${selectedProspect.name.toLowerCase().replace(/\s+/g, '.')}@${selectedProspect.domain}`}</strong></span>
+                    <span>Phone: <strong className="text-emerald-400">{selectedProspect.phone || '+1 (555) 555-0100'}</strong></span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDeleteProspect(selectedProspect.id)}
+                  className="bg-rose-950/40 hover:bg-rose-900/30 border border-rose-900/40 text-rose-400 px-2 py-1 rounded text-[9px] font-mono uppercase cursor-pointer transition-all flex items-center gap-1 self-start sm:self-center shrink-0"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Delete</span>
+                </button>
+              </div>
+            )}
 
             <div className="flex-1 bg-dark-bg/60 border border-white/5 rounded p-3 text-xs text-gray-300 leading-relaxed font-mono whitespace-pre-wrap h-80 overflow-y-auto">
               {responseText ? (
@@ -343,6 +446,105 @@ export default function ProspectingTool() {
           </div>
         </div>
       </div>
+
+      {/* Add Contact Modal Dialog */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-dark-panel border border-white/10 rounded-lg p-5 max-w-md w-full space-y-4 shadow-xl">
+            <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
+              <h3 className="font-display font-bold text-xs text-white uppercase tracking-wider">Register Prospect Contact</h3>
+              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white cursor-pointer">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleAddProspect} className="space-y-3">
+              <div>
+                <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newPropName}
+                  onChange={(e) => setNewPropName(e.target.value)}
+                  className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                  placeholder="E.g. Jennifer Lawrence"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Job Title</label>
+                  <input
+                    type="text"
+                    value={newPropTitle}
+                    onChange={(e) => setNewPropTitle(e.target.value)}
+                    className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                    placeholder="E.g. VP of Operations"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Company Name</label>
+                  <input
+                    type="text"
+                    value={newPropCompany}
+                    onChange={(e) => setNewPropCompany(e.target.value)}
+                    className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                    placeholder="E.g. Galaxy Interactive"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={newPropEmail}
+                    onChange={(e) => setNewPropEmail(e.target.value)}
+                    className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                    placeholder="E.g. j.lawrence@galaxy.com"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Phone Number</label>
+                  <input
+                    type="text"
+                    required
+                    value={newPropPhone}
+                    onChange={(e) => setNewPropPhone(e.target.value)}
+                    className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                    placeholder="E.g. +1 (555) 123-4567"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-gray-400 block mb-1 uppercase font-mono">Website Domain</label>
+                <input
+                  type="text"
+                  value={newPropDomain}
+                  onChange={(e) => setNewPropDomain(e.target.value)}
+                  className="w-full bg-dark-bg border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-gray-600 outline-none focus:border-brand-primary"
+                  placeholder="E.g. galaxy.com"
+                />
+              </div>
+
+              <div className="pt-2.5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 rounded px-3 py-1.5 text-[10px] font-mono uppercase cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-brand-primary hover:bg-brand-hover text-white rounded px-3.5 py-1.5 text-[10px] font-mono uppercase font-bold cursor-pointer"
+                >
+                  Add Prospect
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
