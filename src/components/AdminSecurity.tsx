@@ -10,8 +10,10 @@ import {
   AlertTriangle,
   RotateCw
 } from 'lucide-react';
+import { useNotifications } from './NotificationProvider';
 
 export default function AdminSecurity() {
+  const { addToast } = useNotifications();
   const [isHardening, setIsHardening] = useState(false);
   const [auditLogs, setAuditLogs] = useState<string[]>([
     '[AUDIT] Security context validated for active SSL layer.',
@@ -23,6 +25,7 @@ export default function AdminSecurity() {
   const triggerSecuritySweep = () => {
     setIsHardening(true);
     setAuditLogs(prev => [...prev, '[SWEEP] Starting global cryptographic verification & port hygiene audit...']);
+    addToast('Starting cryptographic security & compliance hardening sweep...', 'system', 2500);
     
     setTimeout(() => {
       setAuditLogs(prev => [
@@ -32,6 +35,7 @@ export default function AdminSecurity() {
         '[SUCCESS] Security Sweep complete. AI-BOS instance score remains at 100% hardened.'
       ]);
       setIsHardening(false);
+      addToast('Security sweep complete! All nodes running in isolation mode (ISO-27001).', 'success', 4000);
     }, 1500);
   };
 

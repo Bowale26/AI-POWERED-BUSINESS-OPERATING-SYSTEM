@@ -1,0 +1,69 @@
+{
+  "entities": {
+    "Lead": {
+      "title": "Lead",
+      "description": "SaaS CRM Sales Lead Pipeline entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "email": { "type": "string" },
+        "interactions": { "type": "number" },
+        "lastActivity": { "type": "string" },
+        "status": { "type": "string" },
+        "estimatedValue": { "type": "number" }
+      }
+    },
+    "Integration": {
+      "title": "Integration",
+      "description": "Third-party platform integrations configuration.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "type": "string" },
+        "connected": { "type": "boolean" }
+      }
+    },
+    "Setting": {
+      "title": "Setting",
+      "description": "Global operational settings, including maintenance features.",
+      "type": "object",
+      "properties": {
+        "maintenanceMode": { "type": "boolean" },
+        "activeIncidents": { "type": "number" }
+      }
+    },
+    "ChatFeedback": {
+      "title": "ChatFeedback",
+      "description": "Captures user sentiment for each AI message.",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string" },
+        "messageText": { "type": "string" },
+        "sentiment": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["messageId", "messageText", "sentiment", "timestamp"]
+    }
+  },
+  "firestore": {
+    "leads/{leadId}": {
+      "schema": "Lead",
+      "description": "SaaS pipeline leads."
+    },
+    "integrations/{integrationId}": {
+      "schema": "Integration",
+      "description": "Integrations list."
+    },
+    "settings/{settingId}": {
+      "schema": "Setting",
+      "description": "Global system configurations."
+    },
+    "chat_feedback/{feedbackId}": {
+      "schema": "ChatFeedback",
+      "description": "Chat message ratings and ratings history."
+    }
+  }
+}

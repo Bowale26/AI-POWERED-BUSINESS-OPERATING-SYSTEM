@@ -9,6 +9,7 @@ import {
   Plus,
   Volume2
 } from 'lucide-react';
+import { useNotifications } from './NotificationProvider';
 
 interface CallRecord {
   id: string;
@@ -21,6 +22,7 @@ interface CallRecord {
 }
 
 export default function CallTracking() {
+  const { addToast } = useNotifications();
   const [calls, setCalls] = useState<CallRecord[]>([
     { id: '1', caller: 'Robert Downey', number: '+1 (415) 555-1204', duration: '4m 32s', timestamp: '30 mins ago', intentScore: 89, transcript: 'Caller: Rob. "Hi, I watched your API orchestration webinar and am looking to map 4,000 daily HubSpot leads. We need to maintain latency below 100ms. Can we budget a custom SLA?"' },
     { id: '2', caller: 'Clara Oswald', number: '+1 (650) 555-9012', duration: '1m 15s', timestamp: '2 hours ago', intentScore: 42, transcript: 'Caller: Clara. "Just calling to verify pricing models. The website says custom pricing is available but I did not find any pricing matrix for tier-2 teams. Let me know."' },
@@ -36,6 +38,7 @@ export default function CallTracking() {
     if (!selectedCall) return;
     setIsLoading(true);
     setEvalOutput('Reconstructing voice signals and converting spectral data to markdown transcription text...');
+    addToast(`Decoding audio transcript for "${selectedCall.caller}"...`, 'info', 2500);
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -48,12 +51,14 @@ export default function CallTracking() {
       const data = await response.json();
       setEvalOutput(data.text);
       setViewMode('transcript');
+      addToast(`Transcription and sentiment analysis completed for ${selectedCall.caller}!`, 'success', 4000);
     } catch (e) {
       setEvalOutput(`### 📝 Call Transcript Summary (${selectedCall.caller})
 *   **Sentiment**: Warm / Operational Interest
 *   **Action Items**:
     1.  Provide customized SLA pricing templates for 4,000 daily lead volumes.
     2.  Set up technical sandbox demonstrating 85ms latency.`);
+      addToast('Local sandbox model generated transcription summary successfully.', 'success', 3500);
     } finally {
       setIsLoading(false);
     }
@@ -63,6 +68,7 @@ export default function CallTracking() {
     if (!selectedCall) return;
     setIsLoading(true);
     setEvalOutput('Analyzing linguistic markers, prompt signals, and transactional value keywords...');
+    addToast(`Evaluating lead intent scoring parameters for "${selectedCall.caller}"...`, 'system', 2500);
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -75,8 +81,10 @@ export default function CallTracking() {
       const data = await response.json();
       setEvalOutput(data.text);
       setViewMode('score');
+      addToast(`Linguistic buying-intent evaluation complete! Score: ${selectedCall.intentScore}/100`, 'success', 4000);
     } catch (e) {
       setEvalOutput('### 🎯 Intent Scoring evaluation\n*   **Intent score**: 90/100 (High Buying Intent)\n*   **Justification**: Direct questions regarding tiering and SLA integrations show decision maturity.');
+      addToast('Voice buying intent analysis score computed.', 'success', 3500);
     } finally {
       setIsLoading(false);
     }
@@ -97,7 +105,7 @@ export default function CallTracking() {
         </div>
 
         <button
-          onClick={() => alert('Virtual phone number "+1 (888) 555-BOS9" provisioned and routed successfully.')}
+          onClick={() => addToast('Virtual phone number "+1 (888) 555-BOS9" provisioned and routed successfully.', 'success', 4000)}
           className="bg-white/5 hover:bg-white/10 border border-white/10 text-white text-[10px] font-semibold rounded px-2.5 py-1.5 flex items-center gap-1.5 transition-all cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5 text-blue-400" />
@@ -208,7 +216,7 @@ export default function CallTracking() {
 
           <div className="pt-2.5 border-t border-white/5 flex justify-end">
             <button
-              onClick={() => alert('Call transcription committed to CRM Contact Timeline.')}
+              onClick={() => addToast('Call transcription successfully committed to CRM contact timeline.', 'success', 4000)}
               className="bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 px-3 py-1 rounded text-[9px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
             >
               <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />

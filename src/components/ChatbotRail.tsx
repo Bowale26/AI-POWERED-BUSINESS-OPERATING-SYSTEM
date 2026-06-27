@@ -13,9 +13,14 @@ import {
   Play,
   Check,
   RotateCw,
-  FileAudio
+  FileAudio,
+  Radio,
+  ThumbsUp,
+  ThumbsDown
 } from 'lucide-react';
 import { ChatMessage } from '../types';
+import { useNotifications } from './NotificationProvider';
+import { db, doc, setDoc, handleFirestoreError, OperationType } from '../lib/firebase';
 
 interface ChatbotRailProps {
   chatHistory: ChatMessage[];
@@ -26,8 +31,46 @@ interface ChatbotRailProps {
 }
 
 export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onClearHistory, latencyInfo }: ChatbotRailProps) {
+  const { addToast } = useNotifications();
   const [activeSubTab, setActiveSubTab] = useState<'chat' | 'voice' | 'media'>('chat');
   const [inputText, setInputText] = useState<string>('');
+  const [voiceCommandAutoSubmit, setVoiceCommandAutoSubmit] = useState<boolean>(true);
+  const [handsFreeFeedback, setHandsFreeFeedback] = useState<string>('');
+  const [msgFeedback, setMsgFeedback] = useState<Record<string, 'up' | 'down'>>({});
+
+  const handleFeedback = async (messageId: string, text: string, sentiment: 'up' | 'down') => {
+    const currentSentiment = msgFeedback[messageId];
+    const targetSentiment = currentSentiment === sentiment ? undefined : sentiment;
+
+    if (!targetSentiment) {
+      setMsgFeedback(prev => {
+        const copy = { ...prev };
+        delete copy[messageId];
+        return copy;
+      });
+      addToast('Feedback removed.', 'info', 2000);
+      return;
+    }
+
+    setMsgFeedback(prev => ({
+      ...prev,
+      [messageId]: sentiment
+    }));
+
+    try {
+      const payload = {
+        messageId,
+        messageText: text,
+        sentiment,
+        timestamp: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'chat_feedback', messageId), payload);
+      addToast(`Thank you! Recorded feedback as: ${sentiment === 'up' ? 'Positive' : 'Negative'}`, 'success', 3000);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `chat_feedback/${messageId}`);
+    }
+  };
+
   
   // High Thinking level config
   const [thinkingLevel, setThinkingLevel] = useState<'HIGH' | 'LOW'>('HIGH');
@@ -214,7 +257,7 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
           recognition.onresult = (event: any) => {
             if (event.results && event.results[0] && event.results[0][0]) {
               const text = event.results[0][0].transcript;
-              setInputText(text);
+              handleProcessVoiceResult(text);
             }
           };
 
@@ -265,6 +308,48 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
     }
   };
 
+  const handleProcessVoiceResult = (rawText: string) => {
+    if (!rawText || !rawText.trim()) return;
+    
+    let finalText = rawText.trim();
+    const lower = finalText.toLowerCase();
+    let commandMatch = '';
+
+    if (lower.includes('strategy') || lower.includes('/strategy')) {
+      finalText = "/strategy Outline a growth path for enterprise CMO leads";
+      commandMatch = '/strategy';
+    } else if (lower.includes('ops') || lower.includes('operation') || lower.includes('/ops')) {
+      finalText = "/ops Map the automated trigger to Salesforce on demo signup";
+      commandMatch = '/ops';
+    } else if (lower.includes('growth') || lower.includes('predict') || lower.includes('/growth')) {
+      finalText = "/growth Predict our operational MRR growth path based on active pipeline";
+      commandMatch = '/growth';
+    }
+
+    setInputText(finalText);
+
+    if (commandMatch) {
+      setHandsFreeFeedback(`Triggered ${commandMatch} workflow command hands-free.`);
+      addToast(`🎙️ Voice Command Triggered: ${commandMatch} (Hands-Free)`, 'success', 4000);
+    } else {
+      setHandsFreeFeedback(`Dictated: "${finalText}"`);
+      addToast(`🎙️ Voice Dictation Captured: "${finalText}"`, 'info', 3000);
+    }
+
+    // Auto submit if enabled
+    if (voiceCommandAutoSubmit) {
+      setTimeout(() => {
+        onSendMessage(finalText, thinkingLevel);
+        setInputText('');
+        setHandsFreeFeedback('');
+      }, 1200); // 1.2s delay so the user visually sees what was transcribing before submission
+    } else {
+      setTimeout(() => {
+        setHandsFreeFeedback('');
+      }, 4000);
+    }
+  };
+
   const useFallbackDictationText = () => {
     const mockDictations = [
       "Analyze latest Q3 performance changes",
@@ -274,7 +359,7 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
       "Predict our operational MRR growth path based on active pipeline"
     ];
     const randomIndex = Math.floor(Math.random() * mockDictations.length);
-    setInputText(mockDictations[randomIndex]);
+    handleProcessVoiceResult(mockDictations[randomIndex]);
   };
 
   // Synthesize custom voice / speech
@@ -552,22 +637,47 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-[8px] font-mono opacity-50">{msg.timestamp}</span>
                       {msg.sender === 'ai' && (
-                        <button
-                          onClick={() => {
-                            let textToSpeak = msg.text;
-                            const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/i;
-                            textToSpeak = textToSpeak.replace(thinkingRegex, '').trim();
-                            textToSpeak = textToSpeak
-                              .replace(/[*_#`~>]/g, '')
-                              .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-                              .trim();
-                            speakText(textToSpeak);
-                          }}
-                          className="opacity-40 group-hover:opacity-100 hover:!opacity-100 transition-opacity p-0.5 rounded text-slate-400 hover:text-purple-900 hover:bg-slate-100 cursor-pointer"
-                          title="Speak this response"
-                        >
-                          <Volume2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleFeedback(msg.id, msg.text, 'up')}
+                            className={`p-0.5 rounded cursor-pointer transition-all ${
+                              msgFeedback[msg.id] === 'up'
+                                ? 'text-emerald-600 bg-emerald-50 scale-110'
+                                : 'opacity-40 group-hover:opacity-100 hover:!opacity-100 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'
+                            }`}
+                            title="Thumbs Up - Helpful response"
+                          >
+                            <ThumbsUp className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => handleFeedback(msg.id, msg.text, 'down')}
+                            className={`p-0.5 rounded cursor-pointer transition-all ${
+                              msgFeedback[msg.id] === 'down'
+                                ? 'text-rose-600 bg-rose-50 scale-110'
+                                : 'opacity-40 group-hover:opacity-100 hover:!opacity-100 text-slate-400 hover:text-rose-600 hover:bg-rose-50'
+                            }`}
+                            title="Thumbs Down - Unhelpful response"
+                          >
+                            <ThumbsDown className="w-3 h-3" />
+                          </button>
+                          <div className="w-[1px] h-3 bg-slate-200" />
+                          <button
+                            onClick={() => {
+                              let textToSpeak = msg.text;
+                              const thinkingRegex = /<thinking>([\s\S]*?)<\/thinking>/i;
+                              textToSpeak = textToSpeak.replace(thinkingRegex, '').trim();
+                              textToSpeak = textToSpeak
+                                .replace(/[*_#`~>]/g, '')
+                                .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+                                .trim();
+                              speakText(textToSpeak);
+                            }}
+                            className="opacity-40 group-hover:opacity-100 hover:!opacity-100 transition-opacity p-0.5 rounded text-slate-400 hover:text-purple-900 hover:bg-slate-100 cursor-pointer"
+                            title="Speak this response"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <div className="leading-normal">{renderMessageText(msg.text)}</div>
@@ -736,43 +846,78 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
       {/* Input box bottom for Chat tab */}
       <div className="p-4 border-t border-slate-200 bg-white space-y-2.5">
         {activeSubTab === 'chat' && (
-          <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-200">
-            <button
-              onClick={handleToggleVoiceDictation}
-              className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                isRecordingDictation 
-                  ? 'bg-rose-500 text-white animate-pulse' 
-                  : 'text-slate-400 hover:text-purple-900 hover:bg-slate-100'
-              }`}
-              title="Dictate with voice (MediaRecorder API)"
-            >
-              {isRecordingDictation ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-            </button>
+          <>
+            {handsFreeFeedback && (
+              <div className="text-[10px] text-purple-900 bg-purple-50/80 px-2.5 py-1.5 rounded-lg border border-purple-100 font-mono flex items-center gap-1.5 animate-pulse">
+                <Radio className="w-3 h-3 text-rose-500" />
+                <span>{handsFreeFeedback}</span>
+              </div>
+            )}
+            
+            <div className="flex items-center gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-200">
+              <button
+                onClick={handleToggleVoiceDictation}
+                className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                  isRecordingDictation 
+                    ? 'bg-rose-500 text-white animate-pulse' 
+                    : 'text-slate-400 hover:text-purple-900 hover:bg-slate-100'
+                }`}
+                title="Dictate with voice (Web Speech API / Fallback)"
+              >
+                {isRecordingDictation ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+              </button>
 
-            <input 
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              onKeyDown={handleKeyPress}
-              placeholder={isRecordingDictation ? `Listening (${dictationSeconds}s)...` : "Execute command E.g., /strategy"}
-              className="flex-1 bg-transparent px-2 py-1.5 text-xs text-slate-800 outline-none"
-              disabled={isRecordingDictation && !speechRecognitionInstance}
-            />
-            <button 
-              onClick={handleSendChat}
-              className="bg-purple-900 hover:bg-purple-800 text-white p-1.5 rounded-lg cursor-pointer transition-all shrink-0"
-            >
-              <Send className="w-3.5 h-3.5 text-amber-400" />
-            </button>
-          </div>
+              <input 
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={handleKeyPress}
+                placeholder={isRecordingDictation ? `Listening (${dictationSeconds}s)...` : "Execute command E.g., /strategy"}
+                className="flex-1 bg-transparent px-2 py-1.5 text-xs text-slate-800 outline-none"
+                disabled={isRecordingDictation && !speechRecognitionInstance}
+              />
+              <button 
+                onClick={handleSendChat}
+                className="bg-purple-900 hover:bg-purple-800 text-white p-1.5 rounded-lg cursor-pointer transition-all shrink-0"
+              >
+                <Send className="w-3.5 h-3.5 text-amber-400" />
+              </button>
+            </div>
+          </>
         )}
 
         {/* Commands helper and system telemetry diagnostics */}
         <div className="space-y-1.5">
           {activeSubTab === 'chat' && (
-            <p className="text-[9px] text-slate-400 text-center font-mono">
-              Commands: <span className="font-bold">/strategy</span> | <span className="font-bold">/ops</span> | <span className="font-bold">/growth</span>
-            </p>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] text-slate-500 border-b border-slate-100 pb-1.5 px-0.5">
+                <button
+                  onClick={() => {
+                    const nextVal = !voiceCommandAutoSubmit;
+                    setVoiceCommandAutoSubmit(nextVal);
+                    addToast(
+                      `Hands-Free Auto-Submit turned ${nextVal ? 'ON' : 'OFF'}`,
+                      'info',
+                      2500
+                    );
+                  }}
+                  className={`flex items-center gap-1 p-0.5 rounded px-1.5 border transition-all cursor-pointer ${
+                    voiceCommandAutoSubmit 
+                      ? 'bg-purple-900/10 text-purple-900 border-purple-900/20 font-bold' 
+                      : 'bg-slate-100 text-slate-500 border-slate-200'
+                  }`}
+                  title="Toggle hands-free immediate execution"
+                >
+                  <Radio className={`w-3 h-3 ${voiceCommandAutoSubmit ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`} />
+                  <span>Hands-Free Auto-Submit: {voiceCommandAutoSubmit ? 'ON' : 'OFF'}</span>
+                </button>
+                <span className="text-[9px] italic text-slate-400 font-mono">Say "strategy" or "ops"</span>
+              </div>
+
+              <p className="text-[9px] text-slate-400 text-center font-mono">
+                Commands: <span className="font-bold">/strategy</span> | <span className="font-bold">/ops</span> | <span className="font-bold">/growth</span>
+              </p>
+            </div>
           )}
 
           {/* Performance Telemetry Meter */}

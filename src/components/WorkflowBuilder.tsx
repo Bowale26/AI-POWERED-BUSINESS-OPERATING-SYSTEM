@@ -11,8 +11,10 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Workflow, WorkflowStep } from '../types';
+import { useNotifications } from './NotificationProvider';
 
 export default function WorkflowBuilder() {
+  const { addToast } = useNotifications();
   const [workflows, setWorkflows] = useState<Workflow[]>([
     {
       id: 'wf-1',
@@ -53,6 +55,7 @@ export default function WorkflowBuilder() {
   const handleSimulateImpact = () => {
     setIsSimulating(true);
     setSimulationLogs(['Initializing safe workflow sandbox...', `Loading telemetry hooks for workflow: "${activeWorkflow.name}"`]);
+    addToast(`Initializing sandbox simulation for "${activeWorkflow.name}"`, 'info', 2500);
     
     let lineIdx = 0;
     const lines = [
@@ -70,16 +73,18 @@ export default function WorkflowBuilder() {
       } else {
         clearInterval(timer);
         setIsSimulating(false);
+        addToast(`Orchestration complete! Projected +${activeWorkflow.efficiencyGain || '+20%'} impact`, 'success', 4000);
       }
     }, 800);
   };
 
   const handleAddCustomStep = () => {
     if (!newStepLabel.trim()) return;
+    const stepLabelText = newStepLabel;
     const newStep: WorkflowStep = {
       id: `custom-step-${Date.now()}`,
       type: 'action',
-      label: newStepLabel,
+      label: stepLabelText,
       description: 'Custom operation injected into the orchestration sequence'
     };
     
@@ -90,6 +95,7 @@ export default function WorkflowBuilder() {
       return w;
     }));
     setNewStepLabel('');
+    addToast(`Successfully injected action step: "${stepLabelText}"`, 'success', 3000);
   };
 
   const handleDeleteStep = (stepId: string) => {
@@ -104,6 +110,7 @@ export default function WorkflowBuilder() {
   const handleGenerateAIWorkflow = async () => {
     if (!aiPrompt.trim()) return;
     setGenerationOutput('Architecting AI-optimized workflow triggers from guidelines...');
+    addToast('Generating custom orchestration pipeline via Gemini...', 'system', 3000);
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
@@ -130,8 +137,10 @@ export default function WorkflowBuilder() {
       };
       setWorkflows([...workflows, newWf]);
       setActiveWorkflowId(newWf.id);
+      addToast(`AI Automation Workflow "${newWf.name}" generated!`, 'success', 3500);
     } catch (e) {
       setGenerationOutput('### AI Workflow Created\nGenerated template. Check local drafts list.');
+      addToast('Local intelligence search fallback used to render fallback template.', 'warning', 3000);
     }
   };
 

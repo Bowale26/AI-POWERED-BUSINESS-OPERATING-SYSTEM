@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sparkles, 
   Wrench, 
@@ -12,12 +12,17 @@ import {
   Settings
 } from 'lucide-react';
 import { SystemIncident, ReleasePlan } from '../types';
+import { db, doc, onSnapshot, setDoc, updateDoc } from '../lib/firebase';
+import { useNotifications } from './NotificationProvider';
 
 export default function MaintenanceHub() {
+  const { addToast } = useNotifications();
   const [systemHealth, setSystemHealth] = useState<'Stable' | 'Degraded' | 'Critical'>('Stable');
   const [maintenanceOutput, setMaintenanceOutput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'console' | 'settings'>('console');
+  const [frequency, setFrequency] = useState('daily');
+  const [autoApply, setAutoApply] = useState(false);
 
   // Logs and incidents lists
   const incidents: SystemIncident[] = [
@@ -28,6 +33,57 @@ export default function MaintenanceHub() {
   const upcomingReleases: ReleasePlan[] = [
     { version: 'v2.8.4', title: 'Webhook Optimization & Analytics Cache Upgrade', changes: ['HubSpot retry latency mitigation', 'Query caching layer expansion', 'Minor translation UI updates'], riskLevel: 'Low', rolloutPercent: 15, scheduledTime: 'July 1, 2026' }
   ];
+
+  // Subscribe and seed maintenance settings
+  useEffect(() => {
+    const docRef = doc(db, 'settings', 'maintenance');
+    const unsubscribe = onSnapshot(docRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        if (data.frequency) setFrequency(data.frequency);
+        if (data.autoApply !== undefined) setAutoApply(data.autoApply);
+      } else {
+        // Seed initial document
+        setDoc(docRef, {
+          frequency: 'daily',
+          autoApply: false,
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }, (error) => {
+      console.error('Firestore maintenance settings sync error:', error);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleUpdateFrequency = async (newFreq: string) => {
+    setFrequency(newFreq);
+    try {
+      await updateDoc(doc(db, 'settings', 'maintenance'), {
+        frequency: newFreq,
+        updatedAt: new Date().toISOString()
+      });
+      addToast(`Telemetry scan frequency updated to: ${newFreq.toUpperCase()}`, 'success', 2500);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to update telemetry frequency in Firestore.', 'error', 3000);
+    }
+  };
+
+  const handleUpdateAutoApply = async (checked: boolean) => {
+    setAutoApply(checked);
+    try {
+      await updateDoc(doc(db, 'settings', 'maintenance'), {
+        autoApply: checked,
+        updatedAt: new Date().toISOString()
+      });
+      addToast(checked ? 'Autonomous canary auto-apply ENABLED' : 'Autonomous canary auto-apply DISABLED', 'info', 2500);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to update auto-apply configuration.', 'error', 3000);
+    }
+  };
 
   const handleMaintenanceAction = async (mode: string) => {
     setIsLoading(true);
@@ -53,9 +109,6 @@ export default function MaintenanceHub() {
       setIsLoading(false);
     }
   };
-
-  const [frequency, setFrequency] = useState('daily');
-  const [autoApply, setAutoApply] = useState(false);
 
   return (
     <div className="bg-dark-card p-5 rounded-lg border border-white/5 space-y-4">
@@ -231,7 +284,7 @@ export default function MaintenanceHub() {
               <label className="font-bold text-gray-400 uppercase tracking-wide text-[10px] font-mono">Autonomous Audit Frequency</label>
               <select 
                 value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
+                onChange={(e) => handleUpdateFrequency(e.target.value)}
                 className="w-full bg-dark-bg border border-white/10 rounded px-3 py-2 outline-none text-xs text-white focus:border-brand-primary"
               >
                 <option value="hourly">Hourly Telemetry Sweep (High Latency/Deep check)</option>
@@ -248,8 +301,8 @@ export default function MaintenanceHub() {
               <input 
                 type="checkbox"
                 checked={autoApply}
-                onChange={(e) => setAutoApply(e.target.checked)}
-                className="accent-brand-primary cursor-pointer"
+                onChange={(e) => handleUpdateAutoApply(e.target.checked)}
+                className="accent-brand-primary cursor-pointer w-4 h-4"
               />
             </div>
           </div>

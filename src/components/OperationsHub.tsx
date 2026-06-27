@@ -8,10 +8,13 @@ import {
   Truck, 
   MessageSquare,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
+import { useNotifications } from './NotificationProvider';
 
 export default function OperationsHub() {
+  const { addToast } = useNotifications();
   const [activeSubTab, setActiveSubTab] = useState<'sales' | 'supply' | 'support'>('sales');
   const [aiOutput, setAiOutput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -20,19 +23,53 @@ export default function OperationsHub() {
   const [horizonDays, setHorizonDays] = useState<number>(30);
   const [scenario, setScenario] = useState<'base' | 'optimistic' | 'pessimistic'>('base');
 
-  // Supply Chain Stock Items
-  const stockItems = [
+  // Supply Chain Stock Items (Stateful)
+  const [stockItems, setStockItems] = useState([
     { id: '1', name: 'Premium AI Core Microcontrollers', category: 'Chips', stock: 120, reorderPoint: 300, status: 'CRITICAL', riskLevel: 'High' },
     { id: '2', name: 'Optic Fiber Tranceivers v4', category: 'Hardware', stock: 850, reorderPoint: 400, status: 'OPTIMAL', riskLevel: 'Low' },
     { id: '3', name: 'High-Density Server Sled Racks', category: 'Infrastructure', stock: 45, reorderPoint: 100, status: 'WARNING', riskLevel: 'Medium' },
-  ];
+  ]);
 
-  // Support Tickets
-  const supportTickets = [
+  const [selectedStockIds, setSelectedStockIds] = useState<string[]>([]);
+
+  // Support Tickets (Stateful)
+  const [supportTickets, setSupportTickets] = useState([
     { id: 't-104', user: 'TechVanguard Inc', topic: 'HubSpot synchronization webhook timed out', priority: 'High', date: '2 hours ago' },
     { id: 't-105', user: 'FinanceFlow Ltd', topic: 'Invoice report calculations mismatched by 0.04 cents', priority: 'Medium', date: '4 hours ago' },
     { id: 't-106', user: 'Global Logistics', topic: 'Requested customized API documentation for bulk triggers', priority: 'Low', date: '1 day ago' },
-  ];
+  ]);
+
+  const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
+
+  // Batch Stock Operations
+  const handleBatchUpdateStockStatus = (nextStatus: string) => {
+    setStockItems(prev => prev.map(item => 
+      selectedStockIds.includes(item.id) ? { ...item, status: nextStatus } : item
+    ));
+    setSelectedStockIds([]);
+    addToast(`Successfully updated ${selectedStockIds.length} stock items to "${nextStatus}".`, 'success', 2500);
+  };
+
+  const handleBatchDeleteStock = () => {
+    setStockItems(prev => prev.filter(item => !selectedStockIds.includes(item.id)));
+    setSelectedStockIds([]);
+    addToast('Successfully deleted selected stock items.', 'success', 2500);
+  };
+
+  // Batch Ticket Operations
+  const handleBatchUpdateTicketPriority = (nextPriority: string) => {
+    setSupportTickets(prev => prev.map(t => 
+      selectedTicketIds.includes(t.id) ? { ...t, priority: nextPriority } : t
+    ));
+    setSelectedTicketIds([]);
+    addToast(`Successfully updated ${selectedTicketIds.length} tickets to "${nextPriority}" priority.`, 'success', 2500);
+  };
+
+  const handleBatchDeleteTickets = () => {
+    setSupportTickets(prev => prev.filter(t => !selectedTicketIds.includes(t.id)));
+    setSelectedTicketIds([]);
+    addToast('Successfully deleted selected support tickets.', 'success', 2500);
+  };
 
   const handleSalesAction = async (action: string) => {
     setIsLoading(true);
@@ -226,27 +263,91 @@ Analyzed **$145,000** current monthly recurring revenue.
                 <Truck className="w-4 h-4 text-purple-900" />
               </div>
               
-              <div className="space-y-2">
-                {stockItems.map((item) => (
-                  <div key={item.id} className="p-3 border border-slate-100 bg-slate-50/50 rounded-lg">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-semibold text-xs text-slate-900">{item.name}</h4>
-                        <p className="text-[10px] text-slate-400 font-mono">{item.category}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono ${
-                        item.status === 'CRITICAL' ? 'bg-rose-100 text-rose-800' :
-                        item.status === 'WARNING' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {item.status}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex justify-between text-[11px] font-mono text-slate-600">
-                      <span>Stock: **{item.stock} units**</span>
-                      <span>Reorder limit: {item.reorderPoint}</span>
-                    </div>
+              {/* Batch Stock Action Banner */}
+              {selectedStockIds.length > 0 && (
+                <div className="bg-purple-900/10 border border-purple-900/30 p-2.5 rounded-lg flex flex-col gap-2 text-xs animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">
+                      <span className="font-mono bg-purple-950 text-white px-1.5 py-0.5 rounded-full mr-1">
+                        {selectedStockIds.length}
+                      </span> 
+                      items selected for bulk action:
+                    </span>
+                    <button 
+                      onClick={() => setSelectedStockIds([])} 
+                      className="text-slate-500 hover:text-slate-800 text-[10px] uppercase font-mono cursor-pointer"
+                    >
+                      Clear
+                    </button>
                   </div>
-                ))}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button 
+                      onClick={() => handleBatchUpdateStockStatus('OPTIMAL')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      OPTIMAL
+                    </button>
+                    <button 
+                      onClick={() => handleBatchUpdateStockStatus('WARNING')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      WARNING
+                    </button>
+                    <button 
+                      onClick={() => handleBatchUpdateStockStatus('CRITICAL')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      CRITICAL
+                    </button>
+                    <button 
+                      onClick={handleBatchDeleteStock} 
+                      className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1 ml-auto cursor-pointer transition-all"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {stockItems.map((item) => {
+                  const isChecked = selectedStockIds.includes(item.id);
+                  return (
+                    <div key={item.id} className="p-3 border border-slate-100 bg-slate-50/50 rounded-lg flex items-start gap-2.5">
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStockIds(prev => [...prev, item.id]);
+                          } else {
+                            setSelectedStockIds(prev => prev.filter(id => id !== item.id));
+                          }
+                        }}
+                        className="mt-1 w-3.5 h-3.5 rounded border-slate-300 text-purple-900 focus:ring-purple-900 cursor-pointer accent-purple-900 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-semibold text-xs text-slate-900 truncate">{item.name}</h4>
+                            <p className="text-[10px] text-slate-400 font-mono">{item.category}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold font-mono ${
+                            item.status === 'CRITICAL' ? 'bg-rose-100 text-rose-800' :
+                            item.status === 'WARNING' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex justify-between text-[11px] font-mono text-slate-600">
+                          <span>Stock: **{item.stock} units**</span>
+                          <span>Reorder limit: {item.reorderPoint}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Action triggers */}
@@ -281,24 +382,88 @@ Analyzed **$145,000** current monthly recurring revenue.
                 <MessageSquare className="w-4 h-4 text-purple-900" />
               </div>
 
-              <div className="space-y-2">
-                {supportTickets.map((t) => (
-                  <div key={t.id} className="p-3 border border-slate-100 bg-slate-50/50 rounded-lg">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-slate-400 font-mono">{t.id}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
-                        t.priority === 'High' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
-                      }`}>
-                        {t.priority}
-                      </span>
-                    </div>
-                    <h4 className="font-semibold text-xs text-slate-900 mt-1">{t.topic}</h4>
-                    <div className="mt-2 flex justify-between text-[10px] text-slate-500">
-                      <span>{t.user}</span>
-                      <span>{t.date}</span>
-                    </div>
+              {/* Batch Tickets Action Banner */}
+              {selectedTicketIds.length > 0 && (
+                <div className="bg-purple-900/10 border border-purple-900/30 p-2.5 rounded-lg flex flex-col gap-2 text-xs animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-800">
+                      <span className="font-mono bg-purple-950 text-white px-1.5 py-0.5 rounded-full mr-1">
+                        {selectedTicketIds.length}
+                      </span> 
+                      tickets selected for bulk action:
+                    </span>
+                    <button 
+                      onClick={() => setSelectedTicketIds([])} 
+                      className="text-slate-500 hover:text-slate-800 text-[10px] uppercase font-mono cursor-pointer"
+                    >
+                      Clear
+                    </button>
                   </div>
-                ))}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button 
+                      onClick={() => handleBatchUpdateTicketPriority('High')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      HIGH PRIORITY
+                    </button>
+                    <button 
+                      onClick={() => handleBatchUpdateTicketPriority('Medium')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      MEDIUM PRIORITY
+                    </button>
+                    <button 
+                      onClick={() => handleBatchUpdateTicketPriority('Low')} 
+                      className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 px-2 py-1 rounded text-[10px] font-mono cursor-pointer transition-all"
+                    >
+                      LOW PRIORITY
+                    </button>
+                    <button 
+                      onClick={handleBatchDeleteTickets} 
+                      className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 px-2 py-1 rounded text-[10px] font-mono flex items-center gap-1 ml-auto cursor-pointer transition-all"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {supportTickets.map((t) => {
+                  const isChecked = selectedTicketIds.includes(t.id);
+                  return (
+                    <div key={t.id} className="p-3 border border-slate-100 bg-slate-50/50 rounded-lg flex items-start gap-2.5">
+                      <input 
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedTicketIds(prev => [...prev, t.id]);
+                          } else {
+                            setSelectedTicketIds(prev => prev.filter(id => id !== t.id));
+                          }
+                        }}
+                        className="mt-1 w-3.5 h-3.5 rounded border-slate-300 text-purple-900 focus:ring-purple-900 cursor-pointer accent-purple-900 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-start">
+                          <span className="text-[10px] font-bold text-slate-400 font-mono">{t.id}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                            t.priority === 'High' ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700'
+                          }`}>
+                            {t.priority}
+                          </span>
+                        </div>
+                        <h4 className="font-semibold text-xs text-slate-900 mt-1 truncate">{t.topic}</h4>
+                        <div className="mt-2 flex justify-between text-[10px] text-slate-500">
+                          <span>{t.user}</span>
+                          <span>{t.date}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Action triggers */}

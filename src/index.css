@@ -1,15 +1,104 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
+:root {
+  --color-bg: #0A0B0D;
+  --color-panel: #111214;
+  --color-card: #161B22;
+  --color-border: rgba(255, 255, 255, 0.05);
+  --color-text-main: #D1D5DB;
+  --color-text-muted: #9CA3AF;
+  --color-text-title: #FFFFFF;
+}
+
+.theme-light {
+  --color-bg: #F8FAFC;
+  --color-panel: #FFFFFF;
+  --color-card: #E2E8F0;
+  --color-border: #94A3B8;
+  --color-text-main: #0F172A;
+  --color-text-muted: #334155;
+  --color-text-title: #000000;
+}
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-display: "Space Grotesk", sans-serif;
-  --color-dark-bg: #0A0B0D;
-  --color-dark-panel: #111214;
-  --color-dark-card: #161B22;
+  --color-dark-bg: var(--color-bg);
+  --color-dark-panel: var(--color-panel);
+  --color-dark-card: var(--color-card);
   --color-brand-primary: #2563eb;
   --color-brand-hover: #1d4ed8;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+/* High Contrast Light overrides */
+.theme-light h1, 
+.theme-light h2, 
+.theme-light h3, 
+.theme-light h4, 
+.theme-light h5, 
+.theme-light h6,
+.theme-light strong,
+.theme-light label {
+  color: #000000 !important;
+}
+
+.theme-light .text-white {
+  color: #000000 !important;
+}
+
+.theme-light .text-gray-200 {
+  color: #0F172A !important;
+}
+
+.theme-light .text-gray-300 {
+  color: #1E293B !important;
+}
+
+.theme-light .text-gray-400 {
+  color: #334155 !important;
+}
+
+.theme-light .text-gray-500 {
+  color: #475569 !important;
+}
+
+.theme-light .border-white\/5 {
+  border-color: #CBD5E1 !important;
+}
+
+.theme-light .border-white\/10 {
+  border-color: #94A3B8 !important;
+}
+
+.theme-light .bg-dark-bg {
+  background-color: #F8FAFC !important;
+}
+
+.theme-light .bg-dark-panel {
+  background-color: #FFFFFF !important;
+}
+
+.theme-light .bg-dark-card {
+  background-color: #F1F5F9 !important;
+}
+
+.theme-light .prose {
+  color: #000000 !important;
+}
+
+.theme-light .prose-invert {
+  --tw-prose-body: #0F172A;
+  --tw-prose-headings: #000000;
+  --tw-prose-lead: #334155;
+  --tw-prose-links: #2563eb;
 }
 
 /* Custom scrollbars and styling elements */

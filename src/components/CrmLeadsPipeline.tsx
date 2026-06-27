@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lead } from '../types';
 import { 
   Users, 
@@ -9,21 +9,19 @@ import {
   DollarSign, 
   Award,
   RefreshCw,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
+import { db, collection, onSnapshot, setDoc, doc, updateDoc, deleteDoc } from '../lib/firebase';
+import { useNotifications } from './NotificationProvider';
 
 export default function CrmLeadsPipeline() {
-  const [leads, setLeads] = useState<Lead[]>([
-    { id: '1', name: 'Sarah Jenkins', company: 'Alpha Corp', email: 's.jenkins@alphacorp.com', interactions: 14, lastActivity: 'Downloaded Technical Paper', status: 'qualified', estimatedValue: 45000, score: 92, explanation: 'High technical engagement, matching ICP tier-1 profile with immediate decision timeline.' },
-    { id: '2', name: 'Marcus Chen', company: 'Velo Group', email: 'mchen@velogroup.co', interactions: 8, lastActivity: 'Attended Webinar', status: 'contacted', estimatedValue: 24000, score: 78, explanation: 'Strong interest shown during live Q&A. Growth-focused startup seeking workflow optimization.' },
-    { id: '3', name: 'Darren Vance', company: 'Horizon Logistics', email: 'vance@horizon.io', interactions: 3, lastActivity: 'Website Visit (Pricing)', status: 'new', estimatedValue: 75000, score: 62, explanation: 'High enterprise value potential, but currently low engagement. Needs persistent email drip.' },
-    { id: '4', name: 'Elena Rostova', company: 'Novis Tech', email: 'erostova@novis.tech', interactions: 21, lastActivity: 'Requested Customized Demo', status: 'converted', estimatedValue: 110000, score: 96, explanation: 'Critical decision maker requested sandboxed proof-of-concept. High budget alignment detected.' },
-    { id: '5', name: 'Lucas Thorne', company: 'Nexus Retail', email: 'l.thorne@nexus.com', interactions: 2, lastActivity: 'Bounce on intro email', status: 'lost', estimatedValue: 15000, score: 15, explanation: 'Extremely cold interaction. Bounced inbound mail and non-responsive core contact profile.' }
-  ]);
-
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(leads[0]);
+  const { addToast } = useNotifications();
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isScoring, setIsScoring] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
 
   // Form states
   const [newLeadName, setNewLeadName] = useState('');
@@ -31,6 +29,50 @@ export default function CrmLeadsPipeline() {
   const [newLeadEmail, setNewLeadEmail] = useState('');
   const [newLeadValue, setNewLeadValue] = useState('25000');
   const [newLeadActivity, setNewLeadActivity] = useState('Organic Google Search referral');
+
+  // Firestore sync and seeding
+  useEffect(() => {
+    const leadsCollection = collection(db, 'leads');
+    const unsubscribe = onSnapshot(leadsCollection, (snapshot) => {
+      const loadedLeads: Lead[] = [];
+      snapshot.forEach((doc) => {
+        loadedLeads.push(doc.data() as Lead);
+      });
+
+      if (loadedLeads.length === 0) {
+        // Seed default dataset
+        const initialLeads: Lead[] = [
+          { id: '1', name: 'Sarah Jenkins', company: 'Alpha Corp', email: 's.jenkins@alphacorp.com', interactions: 14, lastActivity: 'Downloaded Technical Paper', status: 'qualified', estimatedValue: 45000, score: 92, explanation: 'High technical engagement, matching ICP tier-1 profile with immediate decision timeline.' },
+          { id: '2', name: 'Marcus Chen', company: 'Velo Group', email: 'mchen@velogroup.co', interactions: 8, lastActivity: 'Attended Webinar', status: 'contacted', estimatedValue: 24000, score: 78, explanation: 'Strong interest shown during live Q&A. Growth-focused startup seeking workflow optimization.' },
+          { id: '3', name: 'Darren Vance', company: 'Horizon Logistics', email: 'vance@horizon.io', interactions: 3, lastActivity: 'Website Visit (Pricing)', status: 'new', estimatedValue: 75000, score: 62, explanation: 'High enterprise value potential, but currently low engagement. Needs persistent email drip.' },
+          { id: '4', name: 'Elena Rostova', company: 'Novis Tech', email: 'erostova@novis.tech', interactions: 21, lastActivity: 'Requested Customized Demo', status: 'converted', estimatedValue: 110000, score: 96, explanation: 'Critical decision maker requested sandboxed proof-of-concept. High budget alignment detected.' },
+          { id: '5', name: 'Lucas Thorne', company: 'Nexus Retail', email: 'l.thorne@nexus.com', interactions: 2, lastActivity: 'Bounce on intro email', status: 'lost', estimatedValue: 15000, score: 15, explanation: 'Extremely cold interaction. Bounced inbound mail and non-responsive core contact profile.' }
+        ];
+
+        initialLeads.forEach(async (lead) => {
+          await setDoc(doc(db, 'leads', lead.id), lead);
+        });
+        addToast('Successfully initialized default CRM Leads in Firestore Cloud database', 'system', 3500);
+      } else {
+        // Sort to maintain layout consistency
+        loadedLeads.sort((a, b) => a.id.localeCompare(b.id));
+        setLeads(loadedLeads);
+        
+        // Auto-select
+        setSelectedLead((current) => {
+          if (current) {
+            return loadedLeads.find((l) => l.id === current.id) || loadedLeads[0];
+          }
+          return loadedLeads[0];
+        });
+      }
+    }, (error) => {
+      console.error('Firestore subscription error:', error);
+      addToast('Error synchronizing with Cloud Firestore.', 'error', 3000);
+    });
+
+    return () => unsubscribe();
+  }, [addToast]);
 
   const handleScorePipeline = async () => {
     setIsScoring(true);
@@ -45,30 +87,28 @@ export default function CrmLeadsPipeline() {
       });
       const data = await response.json();
       
-      // Update local leads scores based on returned AI suggestions
-      const updated = leads.map(lead => {
+      // Update Firestore leads scores based on returned AI suggestions
+      for (const lead of leads) {
         const isSarah = lead.name.includes('Sarah');
         const isMarcus = lead.name.includes('Marcus');
         const baseScore = isSarah ? 95 : isMarcus ? 82 : Math.floor(Math.random() * 40) + 50;
-        return {
+        const updatedLead = {
           ...lead,
           score: baseScore,
           explanation: `Score recalculated via live CRM intelligence. Active engagement patterns verified with high confidence. Value potential: $${lead.estimatedValue}.`
         };
-      });
-      setLeads(updated);
-      if (selectedLead) {
-        const fresh = updated.find(u => u.id === selectedLead.id);
-        if (fresh) setSelectedLead(fresh);
+        await setDoc(doc(db, 'leads', lead.id), updatedLead);
       }
+      addToast('Intelligent lead scoring calculated and synced to Cloud Firestore!', 'success', 3500);
     } catch (e) {
       console.error(e);
+      addToast('Failed to analyze lead pipeline.', 'error', 3000);
     } finally {
       setIsScoring(false);
     }
   };
 
-  const handleAddLead = (e: React.FormEvent) => {
+  const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLeadName || !newLeadCompany || !newLeadEmail) return;
 
@@ -85,22 +125,61 @@ export default function CrmLeadsPipeline() {
       explanation: 'Newly registered lead pending global model evaluation. Score is initialized to baseline average.'
     };
 
-    setLeads(prev => [...prev, newLead]);
-    setSelectedLead(newLead);
-    setShowAddForm(false);
-    // Clear inputs
-    setNewLeadName('');
-    setNewLeadCompany('');
-    setNewLeadEmail('');
-    setNewLeadValue('25000');
-    setNewLeadActivity('Organic Google Search referral');
+    try {
+      await setDoc(doc(db, 'leads', newLead.id), newLead);
+      setSelectedLead(newLead);
+      setShowAddForm(false);
+      // Clear inputs
+      setNewLeadName('');
+      setNewLeadCompany('');
+      setNewLeadEmail('');
+      setNewLeadValue('25000');
+      setNewLeadActivity('Organic Google Search referral');
+      addToast(`Lead "${newLeadName}" successfully registered to Cloud Firestore!`, 'success', 3000);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to persist lead card to Firestore.', 'error', 3000);
+    }
   };
 
-  const updateLeadStatus = (leadId: string, newStatus: Lead['status']) => {
-    const updated = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
-    setLeads(updated);
-    if (selectedLead?.id === leadId) {
-      setSelectedLead({ ...selectedLead, status: newStatus });
+  const updateLeadStatus = async (leadId: string, newStatus: Lead['status']) => {
+    try {
+      await updateDoc(doc(db, 'leads', leadId), { status: newStatus });
+      addToast(`Lead successfully moved to "${newStatus.toUpperCase()}"`, 'success', 2500);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to update lead status in Firestore.', 'error', 3000);
+    }
+  };
+
+  const handleBatchUpdateStatus = async (newStatus: Lead['status']) => {
+    if (selectedLeadIds.length === 0) return;
+    try {
+      for (const id of selectedLeadIds) {
+        await updateDoc(doc(db, 'leads', id), { status: newStatus });
+      }
+      addToast(`Successfully moved ${selectedLeadIds.length} leads to "${newStatus.toUpperCase()}"`, 'success', 3000);
+      setSelectedLeadIds([]);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to bulk update lead statuses in Firestore.', 'error', 3000);
+    }
+  };
+
+  const handleBatchDeleteLeads = async () => {
+    if (selectedLeadIds.length === 0) return;
+    const confirmed = window.confirm ? window.confirm(`Are you sure you want to permanently delete these ${selectedLeadIds.length} selected leads from Cloud Firestore?`) : true;
+    if (!confirmed) return;
+
+    try {
+      for (const id of selectedLeadIds) {
+        await deleteDoc(doc(db, 'leads', id));
+      }
+      addToast(`Successfully deleted ${selectedLeadIds.length} leads from Cloud Firestore.`, 'success', 3000);
+      setSelectedLeadIds([]);
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to bulk delete leads from Firestore.', 'error', 3000);
     }
   };
 
@@ -240,6 +319,45 @@ export default function CrmLeadsPipeline() {
         </div>
       )}
 
+      {/* Bulk Action Controls */}
+      {selectedLeadIds.length > 0 && (
+        <div className="bg-brand-primary/10 border border-brand-primary/30 p-3 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-white bg-brand-primary px-2 py-0.5 rounded-full font-mono">{selectedLeadIds.length}</span>
+            <span className="text-gray-300 font-medium">leads selected for bulk action:</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-mono text-gray-500 uppercase">Status:</span>
+            <div className="flex gap-1">
+              {columns.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => handleBatchUpdateStatus(c.id)}
+                  className="bg-dark-panel border border-white/10 hover:border-brand-primary hover:text-white px-2 py-1 rounded text-[9px] font-mono uppercase cursor-pointer transition-all"
+                  title={`Move selected to ${c.title}`}
+                >
+                  {c.id}
+                </button>
+              ))}
+            </div>
+            <div className="h-4 w-px bg-white/10 mx-1" />
+            <button
+              onClick={handleBatchDeleteLeads}
+              className="bg-rose-950/40 border border-rose-900/40 hover:bg-rose-900/30 text-rose-400 px-2.5 py-1 rounded text-[10px] font-mono uppercase cursor-pointer transition-all flex items-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Delete Selected</span>
+            </button>
+            <button
+              onClick={() => setSelectedLeadIds([])}
+              className="text-gray-400 hover:text-white px-2 py-1 text-[10px] font-mono uppercase cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Board Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Kanban Board Columns (8 cols) */}
@@ -252,7 +370,7 @@ export default function CrmLeadsPipeline() {
                   <span>{col.title}</span>
                   <span className="font-mono bg-white/10 px-1 rounded">{colLeads.length}</span>
                 </div>
-
+ 
                 <div className="flex-1 space-y-1.5 overflow-y-auto scrollbar-thin">
                   {colLeads.length === 0 ? (
                     <div className="h-16 flex items-center justify-center border border-dashed border-white/5 rounded-md text-[8px] text-gray-600 text-center uppercase tracking-wide">
@@ -262,6 +380,7 @@ export default function CrmLeadsPipeline() {
                     colLeads.map((lead) => {
                       const isHigh = (lead.score || 0) >= 85;
                       const isSelected = selectedLead?.id === lead.id;
+                      const isChecked = selectedLeadIds.includes(lead.id);
                       return (
                         <div
                           key={lead.id}
@@ -273,7 +392,22 @@ export default function CrmLeadsPipeline() {
                           }`}
                         >
                           <div className="flex justify-between items-start gap-1">
-                            <h4 className="text-[11px] font-bold text-white truncate leading-tight">{lead.name}</h4>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedLeadIds(prev => [...prev, lead.id]);
+                                  } else {
+                                    setSelectedLeadIds(prev => prev.filter(id => id !== lead.id));
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 rounded border-white/10 bg-dark-bg text-brand-primary focus:ring-brand-primary accent-brand-primary cursor-pointer shrink-0"
+                              />
+                              <h4 className="text-[11px] font-bold text-white truncate leading-tight">{lead.name}</h4>
+                            </div>
                             <span className={`text-[8px] font-mono px-1 rounded shrink-0 font-bold ${
                               isHigh ? 'text-amber-400 bg-amber-400/10 border border-amber-400/20' : 'text-gray-400 bg-gray-500/10'
                             }`}>

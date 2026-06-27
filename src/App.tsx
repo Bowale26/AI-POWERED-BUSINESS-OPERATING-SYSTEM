@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AppTab, ChatMessage } from './types';
+import { HelpCircle, Sun, Moon, Wifi, WifiOff } from 'lucide-react';
+import { NotificationProvider } from './components/NotificationProvider';
+import GlobalSearch from './components/GlobalSearch';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import OperationsHub from './components/OperationsHub';
@@ -10,6 +13,7 @@ import IntegrationsManager from './components/IntegrationsManager';
 import MaintenanceHub from './components/MaintenanceHub';
 import OrchestratorPanel from './components/OrchestratorPanel';
 import ChatbotRail from './components/ChatbotRail';
+import QuickStartTour from './components/QuickStartTour';
 
 // Import New Modular Pillars
 import UnifiedCommand from './components/UnifiedCommand';
@@ -26,13 +30,58 @@ import ChatWidgetAI from './components/ChatWidgetAI';
 import CallTracking from './components/CallTracking';
 import AdminSecurity from './components/AdminSecurity';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<AppTab>('welcome');
+function AppContent() {
+  const [activeTab, setActiveTab] = useState<AppTab>(() => {
+    const saved = localStorage.getItem('ai_bos_active_tab');
+    return (saved as AppTab) || 'welcome';
+  });
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('ai_bos_sidebar_collapsed') === 'true';
+  });
+  const [tourOpen, setTourOpen] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('ai_bos_theme') as 'dark' | 'light') || 'dark';
+  });
+
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('ai_bos_theme', theme);
+  }, [theme]);
+
   const [systemStatus, setSystemStatus] = useState({
     status: 'ONLINE',
     efficiency: '98.4%',
     geminiKeyConfigured: false
   });
+
+  useEffect(() => {
+    const completed = localStorage.getItem('ai_bos_tour_completed');
+    if (completed !== 'true') {
+      setTourOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('ai_bos_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_bos_sidebar_collapsed', String(isCollapsed));
+  }, [isCollapsed]);
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     { 
@@ -158,31 +207,83 @@ Processed command safely: **${text}**.
   };
 
   return (
-    <div className="flex h-screen w-screen bg-dark-bg text-gray-300 overflow-hidden font-sans border-4 border-dark-card select-none">
+    <div className={`flex h-screen w-screen bg-dark-bg text-gray-300 overflow-hidden font-sans border-4 border-dark-card select-none ${theme === 'light' ? 'theme-light' : ''}`}>
       
       {/* Left Navigation Sidebar */}
       <Sidebar 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
         systemStatus={systemStatus} 
+        isCollapsed={isCollapsed}
+        setIsCollapsed={setIsCollapsed}
       />
 
       {/* Main Panel Content Area */}
       <main className="flex-1 flex flex-col min-w-0 bg-dark-bg overflow-y-auto">
         
         {/* App Top Bar */}
-        <header className="h-14 border-b border-white/5 bg-dark-panel px-6 shrink-0 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+        <header className="h-14 border-b border-white/5 bg-dark-panel px-6 shrink-0 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 shrink-0">
             <span className="font-mono text-[10px] uppercase font-bold text-gray-500">Pillar Workspace:</span>
             <span className="text-xs font-semibold bg-white/5 text-blue-400 border border-white/5 px-2.5 py-0.5 rounded uppercase font-mono tracking-wide">
               {renderActiveTabName()}
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-[10px] text-gray-400 font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-              <span>SYSTEM STATUS: <strong className="text-emerald-400">OPTIMIZED</strong></span>
+          {/* Global Search Component */}
+          <div className="flex-grow max-w-sm mx-4">
+            <GlobalSearch setActiveTab={setActiveTab} activeTab={activeTab} />
+          </div>
+
+          <div className="flex items-center gap-4 shrink-0">
+            {/* User-controlled theme switcher */}
+            <button
+              onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+              className="p-1.5 rounded-md border border-white/10 hover:bg-white/5 hover:border-brand-primary/40 transition-all cursor-pointer flex items-center gap-1.5 bg-dark-bg/40 shrink-0"
+              title={theme === 'dark' ? 'Switch to High Contrast Light Theme' : 'Switch to Dark Theme'}
+            >
+              {theme === 'dark' ? (
+                <>
+                  <Sun className="w-3.5 h-3.5 text-amber-400 animate-spin-slow" />
+                  <span className="text-[9px] font-mono uppercase font-bold text-gray-400">High-Contrast Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-[9px] font-mono uppercase font-bold text-slate-800">Classic Dark</span>
+                </>
+              )}
+            </button>
+            <div className="h-4 w-[1px] bg-white/5" />
+
+            <button
+              onClick={() => setTourOpen(true)}
+              className="bg-brand-primary/15 hover:bg-brand-primary/25 border border-brand-primary/25 text-brand-primary text-[10px] font-bold font-mono uppercase px-2.5 py-1 rounded cursor-pointer transition-all flex items-center gap-1 shrink-0 shadow-sm"
+              title="Launch Guided Quick Start Tour"
+            >
+              <HelpCircle className="w-3.5 h-3.5 animate-pulse" />
+              <span>Tour Guide</span>
+            </button>
+            <div className="h-4 w-[1px] bg-white/5" />
+            <div className="flex items-center gap-3.5 text-[10px] text-gray-400 font-mono">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                <span>SYSTEM: <strong className="text-emerald-400">OPTIMIZED</strong></span>
+              </div>
+              <div className="h-3.5 w-[1px] bg-white/10" />
+              <div className="flex items-center gap-1.5" title={isOnline ? "Real-time sync to Firebase is active" : "Internet connection lost. Firebase sync is interrupted."}>
+                {isOnline ? (
+                  <>
+                    <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>SYNC: <strong className="text-emerald-400">ACTIVE</strong></span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                    <span>SYNC: <strong className="text-rose-400 font-bold">INTERRUPTED</strong></span>
+                  </>
+                )}
+              </div>
             </div>
             <div className="h-4 w-[1px] bg-white/5" />
             <div className="text-[10px] text-gray-500 font-mono">
@@ -269,6 +370,21 @@ Processed command safely: **${text}**.
         latencyInfo={latencyInfo}
       />
 
+      {/* Guided Tour Modal */}
+      <QuickStartTour 
+        isOpen={tourOpen} 
+        onClose={() => setTourOpen(false)} 
+        setActiveTab={setActiveTab} 
+      />
+
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
   );
 }
