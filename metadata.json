@@ -1,0 +1,6 @@
+{
+  "name": "Digital Marketing CRM – Orchestrator",
+  "description": "Central AI agent coordinating campaign content, lead scoring, and performance insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
