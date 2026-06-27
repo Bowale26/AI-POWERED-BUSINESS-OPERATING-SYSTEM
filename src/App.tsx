@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppTab, ChatMessage } from './types';
-import { HelpCircle, Sun, Moon, Wifi, WifiOff } from 'lucide-react';
+import { HelpCircle, Sun, Moon, Wifi, WifiOff, Battery, BatteryMedium, BatteryLow } from 'lucide-react';
 import { NotificationProvider } from './components/NotificationProvider';
 import GlobalSearch from './components/GlobalSearch';
 import Sidebar from './components/Sidebar';
@@ -14,6 +14,8 @@ import MaintenanceHub from './components/MaintenanceHub';
 import OrchestratorPanel from './components/OrchestratorPanel';
 import ChatbotRail from './components/ChatbotRail';
 import QuickStartTour from './components/QuickStartTour';
+import { addSystemLog } from './lib/logger';
+
 
 // Import New Modular Pillars
 import UnifiedCommand from './components/UnifiedCommand';
@@ -57,6 +59,30 @@ function AppContent() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [apiCallCount, setApiCallCount] = useState<number>(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const handleApiUsage = () => {
+      setApiCallCount(prev => prev + 1);
+    };
+    window.addEventListener('ai_bos_api_call', handleApiUsage);
+    return () => window.removeEventListener('ai_bos_api_call', handleApiUsage);
+  }, []);
+
+  const formatElapsedTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   useEffect(() => {
     localStorage.setItem('ai_bos_theme', theme);
@@ -131,6 +157,8 @@ Ready for input. Please select a pillar from the left panel, or type a command t
 
     setChatHistory((prev) => [...prev, userMsg]);
     setIsLoading(true);
+    addSystemLog('info', 'AI Core', `User query submitted: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}"`);
+    window.dispatchEvent(new CustomEvent('ai_bos_api_call'));
 
     const startTime = performance.now();
 
@@ -146,6 +174,7 @@ Ready for input. Please select a pillar from the left panel, or type a command t
       const total = Math.round(elapsed);
       const ttft = Math.round(total * (0.35 + Math.random() * 0.1));
       setLatencyInfo({ ttft, total });
+      addSystemLog('success', 'AI Core', `Received response in ${total}ms (TTFT: ${ttft}ms)`);
 
       const aiMsg: ChatMessage = {
         id: `ai-${Date.now()}`,
@@ -159,6 +188,7 @@ Ready for input. Please select a pillar from the left panel, or type a command t
       const total = Math.round(elapsed);
       const ttft = Math.round(total * 0.3);
       setLatencyInfo({ ttft, total });
+      addSystemLog('warn', 'AI Core', `Online request failed. Displaying cached simulation output.`);
 
       const fallbackMsg: ChatMessage = {
         id: `ai-err-${Date.now()}`,
@@ -205,6 +235,29 @@ Processed command safely: **${text}**.
       default: return 'Business Operating System';
     }
   };
+
+  const batteryPercent = Math.max(2, 100 - Math.floor(elapsedSeconds / 15) - (apiCallCount * 4));
+  
+  // Select battery icon and colors
+  let BatteryIcon = Battery;
+  let batteryTextColor = 'text-emerald-400';
+  let batteryBorderColor = 'border-emerald-500/20';
+  let batteryBgColor = 'bg-emerald-500/5';
+  let batteryLabel = 'Optimal';
+
+  if (batteryPercent <= 25) {
+    BatteryIcon = BatteryLow;
+    batteryTextColor = 'text-rose-400';
+    batteryBorderColor = 'border-rose-500/20';
+    batteryBgColor = 'bg-rose-500/5';
+    batteryLabel = 'Critical';
+  } else if (batteryPercent <= 65) {
+    BatteryIcon = BatteryMedium;
+    batteryTextColor = 'text-amber-400';
+    batteryBorderColor = 'border-amber-500/20';
+    batteryBgColor = 'bg-amber-500/5';
+    batteryLabel = 'Warning';
+  }
 
   return (
     <div className={`flex h-screen w-screen bg-dark-bg text-gray-300 overflow-hidden font-sans border-4 border-dark-card select-none ${theme === 'light' ? 'theme-light' : ''}`}>
@@ -285,6 +338,37 @@ Processed command safely: **${text}**.
                 )}
               </div>
             </div>
+
+            <div className="h-4 w-[1px] bg-white/5" />
+
+            {/* Session Battery Resource indicator */}
+            <div className="flex items-center gap-2 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-md text-[10px] font-mono select-none transition-all cursor-pointer relative group shrink-0"
+                 title="Est. Resource Level (API usage & session duration)">
+              <BatteryIcon className={`w-4 h-4 ${batteryTextColor} ${batteryPercent <= 25 ? 'animate-pulse' : ''}`} />
+              <div className="flex flex-col leading-none">
+                <span className="text-gray-400 font-bold text-[9px]">BATTERY: <strong className={batteryTextColor}>{batteryPercent}%</strong></span>
+                <span className="text-gray-500 text-[8px] mt-0.5">Uptime: {formatElapsedTime(elapsedSeconds)}</span>
+              </div>
+              
+              {/* Tooltip detail on hover */}
+              <div className="absolute right-0 top-full mt-2 w-56 bg-dark-panel border border-white/10 p-3 rounded shadow-2xl hidden group-hover:block z-50 text-[10.5px] leading-relaxed text-gray-300">
+                <div className="font-bold border-b border-white/5 pb-1.5 mb-1.5 text-white flex items-center justify-between">
+                  <span>Session Battery Log</span>
+                  <span className={`px-1.5 py-px text-[8px] font-bold uppercase rounded border ${batteryTextColor} ${batteryBorderColor} ${batteryBgColor}`}>
+                    {batteryLabel}
+                  </span>
+                </div>
+                <div className="space-y-1 font-mono text-[9.5px]">
+                  <p>⚡ <span className="text-gray-400">Agent Energy:</span> <strong className={batteryTextColor}>{batteryPercent}%</strong></p>
+                  <p>⏱️ <span className="text-gray-400">Uptime:</span> <strong className="text-blue-400">{formatElapsedTime(elapsedSeconds)}</strong></p>
+                  <p>🤖 <span className="text-gray-400">API Key Queries:</span> <strong className="text-purple-400">{apiCallCount} calls</strong></p>
+                </div>
+                <div className="border-t border-white/5 mt-2 pt-1.5 text-[8.5px] text-gray-500 leading-normal">
+                  Estimates token capacity by weighing background telemetry execution cycles and active API invocations.
+                </div>
+              </div>
+            </div>
+
             <div className="h-4 w-[1px] bg-white/5" />
             <div className="text-[10px] text-gray-500 font-mono">
               Region: <strong className="text-gray-400 font-bold">US-WEST2</strong>

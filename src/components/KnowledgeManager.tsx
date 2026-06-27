@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Clock
 } from 'lucide-react';
+import { exportDocumentToPDF } from '../lib/pdfExporter';
 
 export default function KnowledgeManager() {
   const [dragActive, setDragActive] = useState<boolean>(false);
@@ -181,7 +182,24 @@ export default function KnowledgeManager() {
               <span className="text-[9px] font-mono text-blue-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
                 AI DOCUMENT AGENT
               </span>
-              <span className="text-xs text-gray-400">File: {selectedFileName}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 mr-1">File: {selectedFileName}</span>
+                {aiOutput && !isLoading && (
+                  <button 
+                    onClick={() => exportDocumentToPDF(aiOutput, {
+                      title: `Knowledge Base - ${selectedFileName}`,
+                      subtitle: `AI-BOS Generated SOP / Playbook Summary`,
+                      category: 'KNOWLEDGE DOCUMENT',
+                      author: 'Knowledge Base Analyst'
+                    })}
+                    className="bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 px-2 py-0.5 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
+                    title="Export / Print as PDF"
+                  >
+                    <Download className="w-3 h-3 text-blue-400" />
+                    <span>PDF/Print</span>
+                  </button>
+                )}
+              </div>
             </div>
 
             {isLoading ? (

@@ -100,6 +100,9 @@ I have processed your operational request with **Gemini Intelligence**:
 *   **Recommendation**: Monitor real-time analytics rail for high thinking latency or anomaly notifications.`;
 }
 
+// Global flag to track if pro model quota is exceeded (avoids slow 429 retries)
+let isProModelQuotaExceeded = false;
+
 // 1. Unified Command Chatbot / Command routing proxy
 app.post('/api/ai/chat', async (req, res) => {
   const { message, tab, thinkingLevel = 'HIGH' } = req.body;
@@ -126,7 +129,10 @@ Enclose this entire diagnostic chain-of-thought reasoning process within a <thin
 Follow this immediately with your clean, executive action list outside the tag block. Always include the thinking block when High Thinking Mode is requested!`;
     }
 
-    const modelToUse = thinkingLevel === 'HIGH' ? 'gemini-3.1-pro-preview' : 'gemini-3.5-flash';
+    let modelToUse = thinkingLevel === 'HIGH' ? 'gemini-3.1-pro-preview' : 'gemini-3.5-flash';
+    if (modelToUse === 'gemini-3.1-pro-preview' && isProModelQuotaExceeded) {
+      modelToUse = 'gemini-3.5-flash';
+    }
 
     let response;
     try {
@@ -138,9 +144,12 @@ Follow this immediately with your clean, executive action list outside the tag b
           temperature: thinkingLevel === 'HIGH' ? 0.3 : 0.7,
         }
       });
-    } catch (modelErr) {
+    } catch (modelErr: any) {
       // Fallback to standard fast flash model if premium pro model hits rate limits or other issues
       console.warn("Pro model failed, falling back to flash:", modelErr);
+      if (modelErr && (modelErr.status === 'RESOURCE_EXHAUSTED' || String(modelErr).includes('Quota exceeded') || String(modelErr).includes('429'))) {
+        isProModelQuotaExceeded = true;
+      }
       response = await client.models.generateContent({
         model: 'gemini-3.5-flash',
         contents: message,
@@ -167,18 +176,25 @@ Understand user intent, select the right tool, and respond with concise, actiona
 
 async function generateOrchestratorContent(client: any, prompt: string, instructionSuffix: string) {
   const systemInstruction = `${ORCHESTRATOR_SYSTEM_INSTRUCTION}\n\nContext block: ${instructionSuffix}`;
+  const modelToUse = isProModelQuotaExceeded ? ORCHESTRATOR_FALLBACK_MODEL : ORCHESTRATOR_MODEL;
+  
   try {
     const response = await client.models.generateContent({
-      model: ORCHESTRATOR_MODEL,
+      model: modelToUse,
       contents: prompt,
       config: {
         systemInstruction,
         temperature: ORCHESTRATOR_TEMPERATURE,
       }
     });
-    return { text: response.text, model: ORCHESTRATOR_MODEL };
-  } catch (err) {
-    console.warn(`Calling ${ORCHESTRATOR_MODEL} failed, using fallback...`, err);
+    return { text: response.text, model: modelToUse };
+  } catch (err: any) {
+    if (!isProModelQuotaExceeded) {
+      console.warn(`Calling ${ORCHESTRATOR_MODEL} failed, using fallback...`, err);
+      if (err && (err.status === 'RESOURCE_EXHAUSTED' || String(err).includes('Quota exceeded') || String(err).includes('429'))) {
+        isProModelQuotaExceeded = true;
+      }
+    }
     const response = await client.models.generateContent({
       model: ORCHESTRATOR_FALLBACK_MODEL,
       contents: prompt,

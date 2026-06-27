@@ -14,6 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { useNotifications } from './NotificationProvider';
+import { addSystemLog } from '../lib/logger';
 
 interface Prospect {
   id: string;
@@ -82,6 +83,7 @@ export default function ProspectingTool() {
     setNewPropEmail('');
     setNewPropPhone('');
 
+    addSystemLog('success', 'Prospects', `Manually added prospect "${newProspect.name}" (${newProspect.company})`);
     addToast(`Successfully added prospect "${newProspect.name}" with email & phone!`, 'success', 3000);
   };
 
@@ -96,11 +98,16 @@ export default function ProspectingTool() {
     if (selectedProspect?.id === id) {
       setSelectedProspect(null);
     }
+    addSystemLog('warn', 'Prospects', `Deleted prospect "${p.name}"`);
     addToast(`Removed prospect "${p.name}" from queue.`, 'info', 2500);
   };
 
   const handleFindProspects = async () => {
     setIsLoading(true);
+    addSystemLog('info', 'Prospects', `Triggered AI discovery scan for Industry: "${industry}"`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_bos_api_call'));
+    }
     setResponseText('Scanning B2B datasets & corporate domains for matched profiles...');
     try {
       const response = await fetch('/api/ai/chat', {
@@ -115,12 +122,15 @@ export default function ProspectingTool() {
       setResponseText(data.text);
       
       // Seed some extra prospects
+      const seedName = 'Cynthia Roth';
       setProspects(prev => [
         ...prev,
-        { id: `pr-${Date.now()}`, name: 'Cynthia Roth', title: 'Head of Finance', company: 'Acme Payments', domain: 'acmepayments.com', score: 91, enriched: true }
+        { id: `pr-${Date.now()}`, name: seedName, title: 'Head of Finance', company: 'Acme Payments', domain: 'acmepayments.com', score: 91, enriched: true }
       ]);
+      addSystemLog('success', 'Prospects', `AI discovery completed. Discovered candidate Cynthia Roth.`);
     } catch (e) {
       setResponseText('### 🤖 Prospecting Results (Simulated)\nFound 1 High-Density ICP Match:\n*   **Cynthia Roth (Acme Payments)** - *Head of Finance* | Email: `c.roth@acmepayments.com` | Match Confidence: **94%**');
+      addSystemLog('warn', 'Prospects', `AI discovery scan completed via client fallback.`);
     } finally {
       setIsLoading(false);
     }

@@ -9,11 +9,15 @@ import {
   Terminal,
   Shield,
   Layers,
-  Settings
+  Settings,
+  Trash2,
+  ListRestart,
+  Download
 } from 'lucide-react';
 import { SystemIncident, ReleasePlan } from '../types';
 import { db, doc, onSnapshot, setDoc, updateDoc } from '../lib/firebase';
 import { useNotifications } from './NotificationProvider';
+import { getSystemLogs, addSystemLog, SystemLog } from '../lib/logger';
 
 export default function MaintenanceHub() {
   const { addToast } = useNotifications();
@@ -23,6 +27,45 @@ export default function MaintenanceHub() {
   const [activeTab, setActiveTab] = useState<'console' | 'settings'>('console');
   const [frequency, setFrequency] = useState('daily');
   const [autoApply, setAutoApply] = useState(false);
+  const [liveLogs, setLiveLogs] = useState<SystemLog[]>(() => getSystemLogs());
+
+  useEffect(() => {
+    const handleLogAdded = () => {
+      setLiveLogs(getSystemLogs());
+    };
+    window.addEventListener('ai_bos_log_added', handleLogAdded);
+    return () => window.removeEventListener('ai_bos_log_added', handleLogAdded);
+  }, []);
+
+  const handleClearLogs = () => {
+    localStorage.removeItem('ai_bos_system_logs');
+    setLiveLogs([]);
+    addSystemLog('info', 'System', 'Event logs cleared.');
+    addToast('System logs cleared.', 'info', 2000);
+  };
+
+  const handleExportActivity = () => {
+    try {
+      if (liveLogs.length === 0) {
+        addToast('No logs available to export.', 'info', 2000);
+        return;
+      }
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
+        JSON.stringify(liveLogs, null, 2)
+      )}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      downloadAnchor.setAttribute('download', `system_activity_export_${new Date().toISOString().slice(0, 10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+      addToast('System logs exported successfully as JSON.', 'success', 3000);
+      addSystemLog('success', 'Maintenance', 'Exported full system activity logs in JSON format.');
+    } catch (err) {
+      console.error(err);
+      addToast('Failed to export system activity logs.', 'error', 3000);
+    }
+  };
 
   // Logs and incidents lists
   const incidents: SystemIncident[] = [
@@ -64,9 +107,11 @@ export default function MaintenanceHub() {
         frequency: newFreq,
         updatedAt: new Date().toISOString()
       });
+      addSystemLog('success', 'Maintenance', `Telemetry scan frequency updated to: ${newFreq.toUpperCase()}`);
       addToast(`Telemetry scan frequency updated to: ${newFreq.toUpperCase()}`, 'success', 2500);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'Maintenance', `Failed to update telemetry frequency: ${err instanceof Error ? err.message : err}`);
       addToast('Failed to update telemetry frequency in Firestore.', 'error', 3000);
     }
   };
@@ -78,16 +123,22 @@ export default function MaintenanceHub() {
         autoApply: checked,
         updatedAt: new Date().toISOString()
       });
+      addSystemLog('info', 'Maintenance', `Autonomous canary auto-apply set to: ${checked ? 'ENABLED' : 'DISABLED'}`);
       addToast(checked ? 'Autonomous canary auto-apply ENABLED' : 'Autonomous canary auto-apply DISABLED', 'info', 2500);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'Maintenance', `Failed to update auto-apply configuration: ${err instanceof Error ? err.message : err}`);
       addToast('Failed to update auto-apply configuration.', 'error', 3000);
     }
   };
 
   const handleMaintenanceAction = async (mode: string) => {
     setIsLoading(true);
+    addSystemLog('info', 'Maintenance', `Initiated automated procedure: ${mode.toUpperCase()}`);
     setMaintenanceOutput(`Instructing Maintenance Agent (Gemini Core) to execute: ${mode.toUpperCase()}...`);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ai_bos_api_call'));
+    }
     try {
       const response = await fetch('/api/ai/maintenance-plan', {
         method: 'POST',
@@ -100,7 +151,9 @@ export default function MaintenanceHub() {
       });
       const data = await response.json();
       setMaintenanceOutput(data.text);
+      addSystemLog('success', 'Maintenance', `Successfully executed: ${mode.toUpperCase()}`);
     } catch (err) {
+      addSystemLog('warn', 'Maintenance', `Procedure ${mode.toUpperCase()} completed via fallback response.`);
       setMaintenanceOutput(`### ⚙️ Telemetry Health & Upgrades Report [${mode.toUpperCase()}]
 *   **System Status**: STABLE (Telemetry health check index: **98.4%**).
 *   **Root Cause Clustering**: Found 0 active critical errors. HubSpot rate limits are resolved by expansion of backoff multipliers.
@@ -111,7 +164,7 @@ export default function MaintenanceHub() {
   };
 
   return (
-    <div className="bg-dark-card p-5 rounded-lg border border-white/5 space-y-4">
+    <div className="bg-dark-card p-5 rounded-lg border border-white/5 space-y-4 relative">
       
       {/* Header and Telemetry state */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-3">
@@ -198,6 +251,72 @@ export default function MaintenanceHub() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* Live Event Stream */}
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                  <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider font-mono">Live System Event Log</h4>
+                </div>
+                <button 
+                  id="clear-all-logs-btn"
+                  onClick={handleClearLogs}
+                  disabled={liveLogs.length === 0}
+                  className={`text-[9px] font-mono border px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
+                    liveLogs.length > 0 
+                    ? 'text-rose-400 hover:text-rose-300 border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 cursor-pointer' 
+                    : 'text-gray-600 border-white/5 bg-white/5 cursor-not-allowed opacity-50'
+                  }`}
+                  title="Clear All Logs"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Clear All Logs</span>
+                </button>
+              </div>
+              
+              <div className="bg-dark-panel/40 border border-white/5 rounded p-2.5 max-h-[300px] overflow-y-auto scrollbar-thin space-y-2 font-mono">
+                {liveLogs.length === 0 ? (
+                  <p className="text-[10px] text-gray-600 text-center py-6">No system events logged in this session.</p>
+                ) : (
+                  liveLogs.map((log) => {
+                    let levelColor = 'text-gray-400 border-gray-500/20 bg-gray-500/5';
+                    let containerStyle = 'bg-black/20 border-white/5 text-gray-300';
+                    let textStyle = 'text-gray-300';
+                    
+                    if (log.level === 'success') {
+                      levelColor = 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5';
+                      containerStyle = 'bg-emerald-950/20 border-emerald-500/20 text-emerald-300';
+                      textStyle = 'text-emerald-300/90';
+                    } else if (log.level === 'warn') {
+                      levelColor = 'text-amber-400 border-amber-500/20 bg-amber-500/5';
+                      containerStyle = 'bg-amber-950/20 border-amber-500/20 text-amber-300';
+                      textStyle = 'text-amber-300/90';
+                    } else if (log.level === 'error') {
+                      levelColor = 'text-rose-400 border-rose-500/20 bg-rose-500/5';
+                      containerStyle = 'bg-rose-950/20 border-rose-500/20 text-rose-300';
+                      textStyle = 'text-rose-300/90';
+                    } else if (log.level === 'info') {
+                      levelColor = 'text-blue-400 border-blue-500/20 bg-blue-500/5';
+                      containerStyle = 'bg-blue-950/20 border-blue-500/20 text-blue-300';
+                      textStyle = 'text-blue-300/90';
+                    }
+                    
+                    const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    
+                    return (
+                      <div key={log.id} className={`text-[10px] flex items-start gap-1.5 p-1.5 border rounded hover:bg-black/40 transition-colors ${containerStyle}`}>
+                        <span className="text-gray-500 shrink-0 select-none font-sans">[{timeStr}]</span>
+                        <span className={`px-1.5 py-px text-[8px] font-bold rounded uppercase border shrink-0 ${levelColor}`}>
+                          {log.source}
+                        </span>
+                        <span className={`break-words ${textStyle}`}>{log.message}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
           </div>
@@ -308,6 +427,18 @@ export default function MaintenanceHub() {
           </div>
         </div>
       )}
+
+      {/* Floating Export Activity Button */}
+      <div className="absolute bottom-4 right-4 z-30">
+        <button
+          onClick={handleExportActivity}
+          className="bg-brand-primary hover:bg-brand-hover text-white text-[10px] font-mono font-bold px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer border border-blue-400/20"
+          title="Export all system event logs as JSON"
+        >
+          <Download className="w-3.5 h-3.5 text-blue-200" />
+          <span>Export Activity</span>
+        </button>
+      </div>
 
     </div>
   );

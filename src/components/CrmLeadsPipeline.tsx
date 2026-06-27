@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { db, collection, onSnapshot, setDoc, doc, updateDoc, deleteDoc } from '../lib/firebase';
 import { useNotifications } from './NotificationProvider';
+import { addSystemLog } from '../lib/logger';
 
 export default function CrmLeadsPipeline() {
   const { addToast } = useNotifications();
@@ -138,9 +139,11 @@ export default function CrmLeadsPipeline() {
       setNewLeadPhone('');
       setNewLeadValue('25000');
       setNewLeadActivity('Organic Google Search referral');
+      addSystemLog('success', 'CRM', `Registered new lead "${newLeadName}" from ${newLeadCompany}`);
       addToast(`Lead "${newLeadName}" successfully registered to Cloud Firestore!`, 'success', 3000);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'CRM', `Failed to register lead "${newLeadName}": ${err instanceof Error ? err.message : err}`);
       addToast('Failed to persist lead card to Firestore.', 'error', 3000);
     }
   };
@@ -148,9 +151,11 @@ export default function CrmLeadsPipeline() {
   const updateLeadStatus = async (leadId: string, newStatus: Lead['status']) => {
     try {
       await updateDoc(doc(db, 'leads', leadId), { status: newStatus });
+      addSystemLog('info', 'CRM', `Lead "${leadId}" transitioned to "${newStatus.toUpperCase()}"`);
       addToast(`Lead successfully moved to "${newStatus.toUpperCase()}"`, 'success', 2500);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'CRM', `Failed to transition lead "${leadId}" to "${newStatus}": ${err instanceof Error ? err.message : err}`);
       addToast('Failed to update lead status in Firestore.', 'error', 3000);
     }
   };
@@ -161,10 +166,12 @@ export default function CrmLeadsPipeline() {
       for (const id of selectedLeadIds) {
         await updateDoc(doc(db, 'leads', id), { status: newStatus });
       }
+      addSystemLog('info', 'CRM', `Bulk transitioned ${selectedLeadIds.length} leads to "${newStatus.toUpperCase()}"`);
       addToast(`Successfully moved ${selectedLeadIds.length} leads to "${newStatus.toUpperCase()}"`, 'success', 3000);
       setSelectedLeadIds([]);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'CRM', `Bulk transition failed: ${err instanceof Error ? err.message : err}`);
       addToast('Failed to bulk update lead statuses in Firestore.', 'error', 3000);
     }
   };
@@ -178,10 +185,12 @@ export default function CrmLeadsPipeline() {
       for (const id of selectedLeadIds) {
         await deleteDoc(doc(db, 'leads', id));
       }
+      addSystemLog('warn', 'CRM', `Bulk deleted ${selectedLeadIds.length} leads from database`);
       addToast(`Successfully deleted ${selectedLeadIds.length} leads from Cloud Firestore.`, 'success', 3000);
       setSelectedLeadIds([]);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'CRM', `Bulk deletion failed: ${err instanceof Error ? err.message : err}`);
       addToast('Failed to bulk delete leads from Firestore.', 'error', 3000);
     }
   };
@@ -192,10 +201,12 @@ export default function CrmLeadsPipeline() {
 
     try {
       await deleteDoc(doc(db, 'leads', leadId));
+      addSystemLog('warn', 'CRM', `Deleted individual lead "${leadId}"`);
       addToast('Lead successfully deleted from Cloud Firestore.', 'success', 3000);
       setSelectedLead(null);
     } catch (err) {
       console.error(err);
+      addSystemLog('error', 'CRM', `Failed to delete lead "${leadId}": ${err instanceof Error ? err.message : err}`);
       addToast('Failed to delete lead from Firestore.', 'error', 3000);
     }
   };

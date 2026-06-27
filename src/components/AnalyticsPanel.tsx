@@ -18,6 +18,7 @@ import {
   X
 } from 'lucide-react';
 import { useNotifications } from './NotificationProvider';
+import { exportDocumentToPDF } from '../lib/pdfExporter';
 
 export default function AnalyticsPanel() {
   const { addToast } = useNotifications();
@@ -321,15 +322,13 @@ Generated dynamically via CRM Orchestrator Analytics v1.5.
 ==================================================
 `;
 
-        const blob = new Blob([reportMarkdown], { type: 'text/markdown;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', `Combined_Executive_Report_${new Date().toISOString().slice(0, 10)}.md`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        addToast(`Successfully generated and downloaded combined PDF-ready report with ${selectedReports.length} sections.`, 'success', 3500);
+        exportDocumentToPDF(reportMarkdown, {
+          title: 'AI-BOS Enterprise Operational Briefing',
+          subtitle: 'Combined Multi-Agent Analytics Report',
+          category: 'ANALYTICS REPORT',
+          author: 'Enterprise Executive Officer'
+        });
+        addToast(`Successfully generated and opened PDF print layout with ${selectedReports.length} sections.`, 'success', 3500);
       }
     } catch (err) {
       console.error(err);

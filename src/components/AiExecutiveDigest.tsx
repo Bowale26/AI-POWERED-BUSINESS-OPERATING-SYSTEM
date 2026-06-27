@@ -8,6 +8,7 @@ import {
   Briefcase,
   AlertTriangle
 } from 'lucide-react';
+import { exportDocumentToPDF } from '../lib/pdfExporter';
 
 export default function AiExecutiveDigest() {
   const [period, setPeriod] = useState('Q3 2026');
@@ -173,11 +174,16 @@ Operations are running securely with stable margins.
           {digestContent && (
             <div className="pt-3 border-t border-white/5 flex justify-end">
               <button 
-                onClick={() => alert('Downloaded PDF/Memo layout in PDF sandbox mode successfully.')}
+                onClick={() => exportDocumentToPDF(digestContent, {
+                  title: `Strategic Business Digest - ${period}`,
+                  subtitle: `Executive Performance Summary & Risks Dashboard`,
+                  category: 'EXECUTIVE MEMO',
+                  author: 'Enterprise Executive Officer'
+                })}
                 className="bg-white/5 hover:bg-white/10 border border-white/10 text-gray-200 px-3 py-1 rounded text-[10px] font-mono font-bold flex items-center gap-1 transition-all cursor-pointer"
               >
                 <Download className="w-3 h-3 text-blue-400" />
-                <span>Export Executive Memo</span>
+                <span>Export / Print PDF Memo</span>
               </button>
             </div>
           )}
