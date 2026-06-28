@@ -3,9 +3,25 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
+import Stripe from 'stripe';
 
 // Load environment variables
 dotenv.config();
+
+// Lazy initializer for Stripe SDK to avoid startup crashes if key is missing
+let stripeClient: Stripe | null = null;
+function getStripeClient(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  if (!secretKey) {
+    throw new Error('STRIPE_SECRET_KEY environment variable is required');
+  }
+  if (!stripeClient) {
+    stripeClient = new Stripe(secretKey, {
+      apiVersion: '2025-01-27.acacia' as any,
+    });
+  }
+  return stripeClient;
+}
 
 const app = express();
 const PORT = 3000;
@@ -412,6 +428,58 @@ app.post('/api/ai/image-generate', async (req, res) => {
       imageUrl: 'https://images.unsplash.com/photo-1557683316-973673baf926?auto=format&fit=crop&w=800&q=80',
       error: err.message,
     });
+  }
+});
+
+// Stripe subscription product credentials configuration endpoint
+app.get('/api/stripe/config', (req, res) => {
+  res.json({
+    stripeConfigured: !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '',
+    PLAN_MONTHLY_NAME: process.env.PLAN_MONTHLY_NAME || 'AI-BOS Monthly Subscription',
+    PLAN_MONTHLY_PRICE: process.env.PLAN_MONTHLY_PRICE || '$29.99/month',
+    STRIPE_PRICE_ID_KEY_MONTHLY: process.env.STRIPE_PRICE_ID_KEY_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU',
+    PLAN_YEARLY_NAME: process.env.PLAN_YEARLY_NAME || 'AI-BOS Annual Subscription',
+    PLAN_YEARLY_PRICE: process.env.PLAN_YEARLY_PRICE || '$299.99/year',
+    STRIPE_PRICE_ID_KEY_YEARLY: process.env.STRIPE_PRICE_ID_KEY_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO'
+  });
+});
+
+// Create a real or simulated Stripe checkout session
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  const { priceId, email, planName } = req.body;
+  const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
+
+  if (!hasSecret) {
+    // Elegant fallback simulation
+    const simulatedSessionId = `cs_test_simulated_${Math.random().toString(36).substring(2, 10)}`;
+    const checkoutUrl = `/?session_id=${simulatedSessionId}&plan=${encodeURIComponent(planName)}`;
+    return res.json({
+      success: true,
+      simulated: true,
+      url: checkoutUrl,
+      message: 'STRIPE_SECRET_KEY is missing. Operating under high-fidelity sandbox simulation.'
+    });
+  }
+
+  try {
+    const stripe = getStripeClient();
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      customer_email: email,
+      success_url: `${req.protocol}://${req.get('host')}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
+      cancel_url: `${req.protocol}://${req.get('host')}/?session_id=cancelled`,
+    });
+    res.json({ success: true, url: session.url, simulated: false });
+  } catch (err: any) {
+    console.error('Stripe session creation failure:', err);
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

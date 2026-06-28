@@ -23,7 +23,8 @@ import {
   Shield,
   Activity,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 import { AppTab } from '../types';
 
@@ -50,6 +51,7 @@ export default function Sidebar({ activeTab, setActiveTab, systemStatus, isColla
     { id: 'digest' as AppTab, label: 'AI Executive Digest', icon: FileText, desc: 'Memo Generator' },
     { id: 'suite' as AppTab, label: 'Enterprise AI Suite', icon: Sparkles, desc: 'Multi-Agent Orchestration' },
     { id: 'sandbox' as AppTab, label: 'Interactive AI Sandbox', icon: Sliders, desc: 'Prompt Playground' },
+    { id: 'subscription' as AppTab, label: 'Subscription & Billing', icon: CreditCard, desc: 'Plans & Security' },
   ];
 
   const growthItems = [

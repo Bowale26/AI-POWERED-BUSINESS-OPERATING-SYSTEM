@@ -19,7 +19,8 @@ export type AppTab =
   | 'knowledge'
   | 'integrations'
   | 'maintenance'
-  | 'admin';
+  | 'admin'
+  | 'subscription';
 
 export interface KPI {
   id: string;

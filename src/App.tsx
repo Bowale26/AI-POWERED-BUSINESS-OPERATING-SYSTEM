@@ -31,6 +31,7 @@ import AdsManager from './components/AdsManager';
 import ChatWidgetAI from './components/ChatWidgetAI';
 import CallTracking from './components/CallTracking';
 import AdminSecurity from './components/AdminSecurity';
+import SubscriptionHub from './components/SubscriptionHub';
 
 function AppContent() {
   const [activeTab, setActiveTab] = useState<AppTab>(() => {
@@ -232,6 +233,7 @@ Processed command safely: **${text}**.
       case 'integrations': return 'API Integrations & SaaS Connectors';
       case 'maintenance': return 'Reliability Telemetry & System Maintenance';
       case 'admin': return 'Tenant Access, Cryptographic Keys & Audits';
+      case 'subscription': return 'Workspace Subscriptions, Billing & Credentials';
       default: return 'Business Operating System';
     }
   };
@@ -440,6 +442,9 @@ Processed command safely: **${text}**.
           )}
           {activeTab === 'admin' && (
             <AdminSecurity />
+          )}
+          {activeTab === 'subscription' && (
+            <SubscriptionHub />
           )}
         </div>
 

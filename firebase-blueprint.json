@@ -46,9 +46,25 @@
         "timestamp": { "type": "string" }
       },
       "required": ["messageId", "messageText", "sentiment", "timestamp"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Workspace profile and active subscription details.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "plan": { "type": "string" },
+        "joinedAt": { "type": "string" }
+      },
+      "required": ["name", "email", "plan", "joinedAt"]
     }
   },
   "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Registered workspace users and plans."
+    },
     "leads/{leadId}": {
       "schema": "Lead",
       "description": "SaaS pipeline leads."
