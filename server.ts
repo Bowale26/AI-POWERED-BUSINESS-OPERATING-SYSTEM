@@ -1,12 +1,67 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
+import cors from 'cors';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import Stripe from 'stripe';
+import fs from 'fs';
+
+// Initialize Firebase SDK on server for Webhook synchronization
+import { initializeApp as initFirebaseApp } from 'firebase/app';
+import { getFirestore, collection, query, where, getDocs, doc, updateDoc } from 'firebase/firestore';
 
 // Load environment variables
 dotenv.config();
+
+let db: any = null;
+try {
+  if (fs.existsSync('./firebase-applet-config.json')) {
+    const firebaseConfig = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf-8'));
+    const firebaseApp = initFirebaseApp({
+      apiKey: firebaseConfig.apiKey,
+      authDomain: firebaseConfig.authDomain,
+      projectId: firebaseConfig.projectId,
+      storageBucket: firebaseConfig.storageBucket,
+      messagingSenderId: firebaseConfig.messagingSenderId,
+      appId: firebaseConfig.appId
+    });
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log("Firebase initialized successfully on server.");
+  } else {
+    console.warn("firebase-applet-config.json not found. Operating without persistent DB updates in webhooks.");
+  }
+} catch (err) {
+  console.error("Error initializing Firebase on server:", err);
+}
+
+async function updateUserPlanByEmail(email: string, planName: string) {
+  if (!db) {
+    console.warn("Firebase DB is not initialized. Cannot update user plan.");
+    return false;
+  }
+  try {
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      console.log(`No user found in Firestore with email: ${email}`);
+      return false;
+    }
+    
+    for (const userDoc of querySnapshot.docs) {
+      await updateDoc(doc(db, 'users', userDoc.id), {
+        plan: planName
+      });
+      console.log(`Successfully updated plan for user ${userDoc.id} (${email}) to: ${planName}`);
+    }
+    return true;
+  } catch (error) {
+    console.error(`Error updating user plan for ${email} in Firestore:`, error);
+    return false;
+  }
+}
 
 // Lazy initializer for Stripe SDK to avoid startup crashes if key is missing
 let stripeClient: Stripe | null = null;
@@ -26,7 +81,13 @@ function getStripeClient(): Stripe {
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(cors());
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
 // Lazy initializer for Google GenAI SDK
 let aiClient: GoogleGenAI | null = null;
@@ -444,13 +505,12 @@ app.get('/api/stripe/config', (req, res) => {
   });
 });
 
-// Create a real or simulated Stripe checkout session
+// Original checkout session creator for React SubscriptionHub
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   const { priceId, email, planName } = req.body;
   const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
 
   if (!hasSecret) {
-    // Elegant fallback simulation
     const simulatedSessionId = `cs_test_simulated_${Math.random().toString(36).substring(2, 10)}`;
     const checkoutUrl = `/?session_id=${simulatedSessionId}&plan=${encodeURIComponent(planName)}`;
     return res.json({
@@ -473,6 +533,10 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       ],
       mode: 'subscription',
       customer_email: email,
+      metadata: {
+        email: email,
+        planName: planName
+      },
       success_url: `${req.protocol}://${req.get('host')}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
       cancel_url: `${req.protocol}://${req.get('host')}/?session_id=cancelled`,
     });
@@ -481,6 +545,173 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     console.error('Stripe session creation failure:', err);
     res.status(400).json({ success: false, error: err.message });
   }
+});
+
+/*
+========================================
+CREATE CHECKOUT SESSION (User Format)
+========================================
+*/
+app.post("/api/create-checkout-session", async (req, res) => {
+  try {
+    const { plan, email } = req.body;
+    let priceId;
+    let planName = 'AI-BOS Subscription';
+
+    if (plan === "monthly") {
+      priceId = process.env.STRIPE_PRICE_ID_KEY_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU';
+      planName = process.env.PLAN_MONTHLY_NAME || 'AI-BOS Monthly Subscription';
+    } else if (plan === "yearly") {
+      priceId = process.env.STRIPE_PRICE_ID_KEY_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO';
+      planName = process.env.PLAN_YEARLY_NAME || 'AI-BOS Annual Subscription';
+    } else {
+      return res.status(400).json({
+        error: "Invalid subscription plan"
+      });
+    }
+
+    const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
+    if (!hasSecret) {
+      const simulatedSessionId = `cs_test_simulated_${Math.random().toString(36).substring(2, 10)}`;
+      const checkoutUrl = `/?session_id=${simulatedSessionId}&plan=${encodeURIComponent(planName)}`;
+      return res.json({
+        url: checkoutUrl,
+        simulated: true,
+        message: 'STRIPE_SECRET_KEY is missing. Operating under high-fidelity sandbox simulation.'
+      });
+    }
+
+    const stripe = getStripeClient();
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      mode: "subscription",
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1
+        }
+      ],
+      customer_email: email,
+      metadata: {
+        email: email,
+        planName: planName
+      },
+      success_url: `${req.protocol}://${req.get('host')}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
+      cancel_url: `${req.protocol}://${req.get('host')}/?session_id=cancelled`
+    });
+
+    res.json({
+      url: session.url
+    });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+/*
+========================================
+WEBHOOK (User Format)
+========================================
+*/
+app.post("/api/stripe-webhook", async (req: any, res) => {
+  const sig = req.headers["stripe-signature"];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
+  if (!hasSecret || !webhookSecret || !sig) {
+    console.log("Stripe webhook received (local bypass/unconfigured):", req.body);
+    return res.json({ received: true, simulated: true });
+  }
+
+  try {
+    const stripe = getStripeClient();
+    // Use rawBody buffer captured during request verification
+    const rawBody = req.rawBody || Buffer.from(JSON.stringify(req.body));
+    event = stripe.webhooks.constructEvent(
+      rawBody,
+      sig,
+      webhookSecret
+    );
+  } catch (err: any) {
+    console.error(`Webhook Error: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as any;
+      const email = session.metadata?.email || session.customer_email || session.customer_details?.email;
+      const planName = session.metadata?.planName || 'Monthly Subscription ($29.99)';
+      console.log(`Subscription activated for ${email} -> ${planName}`);
+      if (email) {
+        await updateUserPlanByEmail(email, planName);
+      }
+      break;
+    }
+
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as any;
+      const email = invoice.customer_email || invoice.customer_name;
+      console.log(`Payment successful for invoice of customer: ${email}`);
+      break;
+    }
+
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as any;
+      const email = invoice.customer_email;
+      console.log(`Payment failed for customer: ${email}`);
+      if (email) {
+        await updateUserPlanByEmail(email, 'None');
+      }
+      break;
+    }
+
+    case "customer.subscription.updated": {
+      const subscription = event.data.object as any;
+      try {
+        const customerId = subscription.customer;
+        const stripe = getStripeClient();
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const email = customer.email;
+        const priceId = subscription.items?.data?.[0]?.price?.id;
+        let planName = 'Monthly Subscription ($29.99)';
+        if (priceId === process.env.STRIPE_PRICE_ID_KEY_YEARLY) {
+          planName = 'Yearly Subscription ($299.99)';
+        }
+        console.log(`Subscription updated for customer ID: ${customerId} (${email}) to: ${planName}`);
+        if (email) {
+          await updateUserPlanByEmail(email, planName);
+        }
+      } catch (err: any) {
+        console.error("Error handling customer.subscription.updated webhook:", err);
+      }
+      break;
+    }
+
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as any;
+      try {
+        const customerId = subscription.customer;
+        const stripe = getStripeClient();
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const email = customer.email;
+        console.log(`Subscription cancelled for customer ID: ${customerId} (${email})`);
+        if (email) {
+          await updateUserPlanByEmail(email, 'None');
+        }
+      } catch (err: any) {
+        console.error("Error handling customer.subscription.deleted webhook:", err);
+      }
+      break;
+    }
+  }
+
+  res.json({ received: true });
 });
 
 // Bootstrap development or production mode

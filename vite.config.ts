@@ -6,6 +6,13 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: {
+      'process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY': JSON.stringify(
+        process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY ||
+        process.env.STRIPE_PUBLISHABLE_KEY ||
+        'pk_live_Y8I4kIWBXPdQIfZ2tthPIFwV00DlqCjZva'
+      ),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

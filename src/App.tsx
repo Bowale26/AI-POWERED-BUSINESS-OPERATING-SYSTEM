@@ -16,6 +16,11 @@ import ChatbotRail from './components/ChatbotRail';
 import QuickStartTour from './components/QuickStartTour';
 import { addSystemLog } from './lib/logger';
 
+// Firebase core & state imports
+import { auth, db, doc, onSnapshot } from './lib/firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import PremiumPaywall from './components/PremiumPaywall';
+
 
 // Import New Modular Pillars
 import UnifiedCommand from './components/UnifiedCommand';
@@ -47,6 +52,48 @@ function AppContent() {
   });
 
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  // User Authentication & Plan Subscription State
+  const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<{ plan: string; name: string; email: string } | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        const docRef = doc(db, 'users', currentUser.uid);
+        const unsubProfile = onSnapshot(docRef, (snapshot) => {
+          if (snapshot.exists()) {
+            setUserProfile(snapshot.data() as any);
+          } else {
+            setUserProfile(null);
+          }
+          setAuthLoading(false);
+        }, (error) => {
+          console.error("Error loading user profile in App:", error);
+          setAuthLoading(false);
+        });
+        return () => unsubProfile();
+      } else {
+        setUserProfile(null);
+        setAuthLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const hasActivePlan = !!userProfile && (
+    userProfile.plan === 'Free Trial' ||
+    userProfile.plan === 'Monthly Subscription ($29.99)' ||
+    userProfile.plan === 'Yearly Subscription ($299.99)' ||
+    userProfile.plan === 'AI-BOS Monthly Subscription' ||
+    userProfile.plan === 'AI-BOS Annual Subscription' ||
+    userProfile.plan.includes('Subscription') ||
+    userProfile.plan.includes('Trial')
+  );
+
+  const isPremiumTab = activeTab !== 'welcome' && activeTab !== 'subscription' && activeTab !== 'stopwatch';
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -380,73 +427,85 @@ Processed command safely: **${text}**.
 
         {/* Dynamic Tab Workspace Body */}
         <div className="p-4 flex-1 max-w-7xl w-full mx-auto space-y-4">
-          {activeTab === 'welcome' && (
-            <Dashboard onSendMessage={handleSendMessage} isLoading={isLoading} />
-          )}
-          {activeTab === 'command' && (
-            <UnifiedCommand onSendMessage={handleSendMessage} isLoading={isLoading} />
-          )}
-          {activeTab === 'operations' && (
-            <OperationsHub />
-          )}
-          {activeTab === 'leads' && (
-            <CrmLeadsPipeline />
-          )}
-          {activeTab === 'task_agent' && (
-            <AiTaskAgent />
-          )}
-          {activeTab === 'stopwatch' && (
-            <FocusStopwatch />
-          )}
-          {activeTab === 'digest' && (
-            <AiExecutiveDigest />
-          )}
-          {activeTab === 'suite' && (
-            <OrchestratorPanel systemStatus={systemStatus} />
-          )}
-          {activeTab === 'sandbox' && (
-            <InteractiveAiSandbox />
-          )}
-          {activeTab === 'prospecting' && (
-            <ProspectingTool />
-          )}
-          {activeTab === 'forms' && (
-            <FormsSurveysQuizzes />
-          )}
-          {activeTab === 'funnels' && (
-            <FunnelsLandingPages />
-          )}
-          {activeTab === 'ads' && (
-            <AdsManager />
-          )}
-          {activeTab === 'chat_widget' && (
-            <ChatWidgetAI />
-          )}
-          {activeTab === 'call_tracking' && (
-            <CallTracking />
-          )}
-          {activeTab === 'workflows' && (
-            <WorkflowBuilder />
-          )}
-          {activeTab === 'analytics' && (
-            <AnalyticsPanel />
-          )}
-          {activeTab === 'knowledge' && (
-            <KnowledgeManager />
-          )}
-          {activeTab === 'integrations' && (
-            <IntegrationsManager />
-          )}
-          {activeTab === 'maintenance' && (
-            <MaintenanceHub />
-          )}
-          {activeTab === 'admin' && (
-            <AdminSecurity />
-          )}
-          {activeTab === 'subscription' && (
-            <SubscriptionHub />
+          {isPremiumTab && !hasActivePlan ? (
+            <PremiumPaywall 
+              user={user}
+              userProfile={userProfile}
+              onNavigateToBilling={() => setActiveTab('subscription')}
+              tabName={renderActiveTabName()}
+            />
+          ) : (
+            <>
+              {activeTab === 'welcome' && (
+                <Dashboard onSendMessage={handleSendMessage} isLoading={isLoading} />
+              )}
+              {activeTab === 'command' && (
+                <UnifiedCommand onSendMessage={handleSendMessage} isLoading={isLoading} />
+              )}
+              {activeTab === 'operations' && (
+                <OperationsHub />
+              )}
+              {activeTab === 'leads' && (
+                <CrmLeadsPipeline />
+              )}
+              {activeTab === 'task_agent' && (
+                <AiTaskAgent />
+              )}
+              {activeTab === 'stopwatch' && (
+                <FocusStopwatch />
+              )}
+              {activeTab === 'digest' && (
+                <AiExecutiveDigest />
+              )}
+              {activeTab === 'suite' && (
+                <OrchestratorPanel systemStatus={systemStatus} />
+              )}
+              {activeTab === 'sandbox' && (
+                <InteractiveAiSandbox />
+              )}
+              {activeTab === 'prospecting' && (
+                <ProspectingTool />
+              )}
+              {activeTab === 'forms' && (
+                <FormsSurveysQuizzes />
+              )}
+              {activeTab === 'funnels' && (
+                <FunnelsLandingPages />
+              )}
+              {activeTab === 'ads' && (
+                <AdsManager />
+              )}
+              {activeTab === 'chat_widget' && (
+                <ChatWidgetAI />
+              )}
+              {activeTab === 'call_tracking' && (
+                <CallTracking />
+              )}
+              {activeTab === 'workflows' && (
+                <WorkflowBuilder />
+              )}
+              {activeTab === 'analytics' && (
+                <AnalyticsPanel />
+              )}
+              {activeTab === 'knowledge' && (
+                <KnowledgeManager />
+              )}
+              {activeTab === 'integrations' && (
+                <IntegrationsManager />
+              )}
+              {activeTab === 'maintenance' && (
+                <MaintenanceHub />
+              )}
+              {activeTab === 'admin' && (
+                <AdminSecurity />
+              )}
+              {activeTab === 'subscription' && (
+                <SubscriptionHub />
+              )}
+            </>
           )}
         </div>
+
 
       </main>
 
