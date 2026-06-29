@@ -35,7 +35,7 @@ try {
   console.error("Error initializing Firebase on server:", err);
 }
 
-async function updateUserPlanByEmail(email: string, planName: string) {
+async function updateUserPlanByEmail(email: string, planName: string, subscriptionStatus?: string, planType?: string, subscriptionId?: string) {
   if (!db) {
     console.warn("Firebase DB is not initialized. Cannot update user plan.");
     return false;
@@ -49,12 +49,44 @@ async function updateUserPlanByEmail(email: string, planName: string) {
       console.log(`No user found in Firestore with email: ${email}`);
       return false;
     }
+
+    // Determine status and type values to write
+    let statusValue = subscriptionStatus;
+    let typeValue = planType;
+
+    if (!statusValue) {
+      if (planName === 'None' || planName.toLowerCase().includes('none')) {
+        statusValue = 'inactive';
+      } else if (planName.toLowerCase().includes('trial')) {
+        statusValue = 'trialing';
+      } else {
+        statusValue = 'active';
+      }
+    }
+
+    if (!typeValue) {
+      if (planName === 'None' || planName.toLowerCase().includes('none')) {
+        typeValue = 'none';
+      } else if (planName.toLowerCase().includes('trial')) {
+        typeValue = 'trial';
+      } else if (planName.toLowerCase().includes('year') || planName.toLowerCase().includes('annual')) {
+        typeValue = 'yearly';
+      } else {
+        typeValue = 'monthly';
+      }
+    }
     
     for (const userDoc of querySnapshot.docs) {
       await updateDoc(doc(db, 'users', userDoc.id), {
-        plan: planName
+        plan: planName,
+        subscriptionStatus: statusValue,
+        subscription_status: statusValue,
+        planType: typeValue,
+        plan_type: typeValue,
+        subscriptionId: subscriptionId || null,
+        subscription_id: subscriptionId || null
       });
-      console.log(`Successfully updated plan for user ${userDoc.id} (${email}) to: ${planName}`);
+      console.log(`Successfully updated plan for user ${userDoc.id} (${email}) to: ${planName} (type: ${typeValue}, status: ${statusValue}, subId: ${subscriptionId})`);
     }
     return true;
   } catch (error) {
@@ -613,6 +645,55 @@ app.post("/api/create-checkout-session", async (req, res) => {
 
 /*
 ========================================
+STRIPE CUSTOMER PORTAL SESSION CREATOR
+========================================
+*/
+app.post('/api/stripe/create-portal-session', async (req, res) => {
+  const { email } = req.body;
+  const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
+
+  if (!hasSecret) {
+    const simulatedPortalUrl = `/?portal_simulated=true`;
+    return res.json({
+      success: true,
+      simulated: true,
+      url: simulatedPortalUrl,
+      message: 'STRIPE_SECRET_KEY is missing. Operating under high-fidelity sandbox simulation.'
+    });
+  }
+
+  try {
+    const stripe = getStripeClient();
+    
+    // Search for existing Stripe customer by email
+    const customers = await stripe.customers.list({
+      email: email,
+      limit: 1
+    });
+
+    let customerId;
+    if (customers.data.length > 0) {
+      customerId = customers.data[0].id;
+    } else {
+      // Create a customer if none exists
+      const customer = await stripe.customers.create({ email });
+      customerId = customer.id;
+    }
+
+    const portalSession = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: `${req.protocol}://${req.get('host')}/?tab=subscription`,
+    });
+
+    res.json({ success: true, url: portalSession.url, simulated: false });
+  } catch (err: any) {
+    console.error('Stripe Customer Portal creation failure:', err);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+/*
+========================================
 WEBHOOK (User Format)
 ========================================
 */
@@ -647,9 +728,10 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
       const session = event.data.object as any;
       const email = session.metadata?.email || session.customer_email || session.customer_details?.email;
       const planName = session.metadata?.planName || 'Monthly Subscription ($29.99)';
-      console.log(`Subscription activated for ${email} -> ${planName}`);
+      const subscriptionId = session.subscription;
+      console.log(`Subscription activated for ${email} -> ${planName} (ID: ${subscriptionId})`);
       if (email) {
-        await updateUserPlanByEmail(email, planName);
+        await updateUserPlanByEmail(email, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subscriptionId);
       }
       break;
     }

@@ -38,9 +38,10 @@ interface SidebarProps {
   };
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
+  userProfile?: { plan: string; name: string; email?: string } | null;
 }
 
-export default function Sidebar({ activeTab, setActiveTab, systemStatus, isCollapsed, setIsCollapsed }: SidebarProps) {
+export default function Sidebar({ activeTab, setActiveTab, systemStatus, isCollapsed, setIsCollapsed, userProfile }: SidebarProps) {
   const coreItems = [
     { id: 'welcome' as AppTab, label: 'Welcome Overview', icon: LayoutDashboard, desc: 'SaaS Briefing' },
     { id: 'command' as AppTab, label: 'Unified Command Center', icon: Terminal, desc: 'Direct Control Room' },
@@ -140,14 +141,42 @@ export default function Sidebar({ activeTab, setActiveTab, systemStatus, isColla
           
           {/* Status Sub-Bar */}
           {!isCollapsed && (
-            <div className="mt-2.5 p-2 bg-dark-bg/60 rounded border border-white/5 flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[9px] text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                <span>SYSTEM ONLINE</span>
-              </span>
-              <span className="text-[9px] font-mono text-blue-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
-                {systemStatus.efficiency} EFF
-              </span>
+            <div className="mt-2.5 space-y-1.5">
+              <div className="p-2 bg-dark-bg/60 rounded border border-white/5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[9px] text-gray-400">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                  <span>SYSTEM ONLINE</span>
+                </span>
+                <span className="text-[9px] font-mono text-blue-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                  {systemStatus.efficiency} EFF
+                </span>
+              </div>
+              
+              <div className="p-2 bg-dark-bg/40 rounded border border-white/5 flex items-center justify-between gap-2">
+                <span className="text-[9px] text-gray-400 font-mono">WORKSPACE TIER</span>
+                {(() => {
+                  const plan = userProfile?.plan?.toLowerCase() || '';
+                  let tier = 'Free';
+                  let style = 'bg-gray-500/10 border-gray-500/20 text-gray-400';
+                  
+                  if (plan.includes('annual') || plan.includes('year') || plan.includes('299')) {
+                    tier = 'Yearly';
+                    style = 'bg-amber-500/15 border-amber-500/25 text-amber-400 font-bold';
+                  } else if (plan.includes('month') || plan.includes('29.99')) {
+                    tier = 'Monthly';
+                    style = 'bg-purple-500/15 border-purple-500/25 text-purple-400 font-bold';
+                  } else if (plan.includes('trial')) {
+                    tier = 'Free Trial';
+                    style = 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 font-bold';
+                  }
+                  
+                  return (
+                    <span className={`text-[8px] font-mono uppercase px-2 py-0.5 rounded border ${style} tracking-wider`}>
+                      {tier}
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </div>

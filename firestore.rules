@@ -1,8 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Global Safety Net (Default Deny Catch-all)
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Global Authentication Helper
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Path ID Sanitization Helper
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // 1. Users collection (Private User Profile Data)
+    match /users/{userId} {
+      allow read, create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 2. Leads collection (SaaS Pipeline Leads)
+    match /leads/{leadId} {
+      allow read, write: if isSignedIn() && isValidId(leadId);
+    }
+
+    // 3. Integrations collection (Third-Party platform configurations)
+    match /integrations/{integrationId} {
+      allow read, write: if isSignedIn() && isValidId(integrationId);
+    }
+
+    // 4. Settings collection (Global Operational settings)
+    match /settings/{settingId} {
+      allow read, write: if isSignedIn() && isValidId(settingId);
+    }
+
+    // 5. Chat Feedback collection (User message sentiments and logs)
+    match /chat_feedback/{feedbackId} {
+      allow read, write: if isSignedIn() && isValidId(feedbackId);
     }
   }
 }
+

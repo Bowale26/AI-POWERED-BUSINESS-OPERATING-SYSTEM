@@ -43,7 +43,7 @@ export default function SubscriptionHub() {
   
   // Auth state
   const [user, setUser] = useState<User | null>(null);
-  const [userProfile, setUserProfile] = useState<{ plan: string; name: string; joinedAt: string } | null>(null);
+  const [userProfile, setUserProfile] = useState<{ plan: string; name: string; email?: string; subscriptionStatus?: string; planType?: string; joinedAt: string } | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   
   // View/Form states: 'plans' | 'signup' | 'signin' | 'forgot' | 'profile'
@@ -78,6 +78,8 @@ export default function SubscriptionHub() {
   const [yearlyPlanName, setYearlyPlanName] = useState<string>('AI-BOS Annual Subscription');
   const [yearlyPlanPrice, setYearlyPlanPrice] = useState<string>('$299.99/year');
   const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState<boolean>(false);
+  const [dismissedRenewalAlert, setDismissedRenewalAlert] = useState<boolean>(false);
 
   // Fetch configuration on component mount
   useEffect(() => {
@@ -384,6 +386,124 @@ export default function SubscriptionHub() {
     }
   };
 
+  const handleManageSubscription = async () => {
+    if (!user) {
+      addToast('Please sign in to manage your subscription.', 'warn', 3000);
+      return;
+    }
+
+    setPortalLoading(true);
+    try {
+      const response = await fetch('/api/stripe/create-portal-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email })
+      });
+      const data = await response.json();
+      if (data.success && data.url) {
+        if (data.simulated) {
+          addToast('Opening simulated Stripe Customer Billing Portal...', 'info', 2500);
+          setTimeout(() => {
+            addToast('Billing simulation: This would redirect to the Stripe Customer Portal where users update cards, download invoices, or cancel plans.', 'success', 6000);
+            setPortalLoading(false);
+          }, 1500);
+        } else {
+          addToast('Redirecting to Stripe Customer Portal...', 'success', 2500);
+          setTimeout(() => {
+            window.location.href = data.url;
+          }, 1000);
+        }
+      } else {
+        addToast(data.error || 'Failed to generate Customer Portal session.', 'error', 3000);
+        setPortalLoading(false);
+      }
+    } catch (err) {
+      console.error('Error generating portal session:', err);
+      addToast('Error contacting subscription management gateway.', 'error', 3000);
+      setPortalLoading(false);
+    }
+  };
+
+  const getPlanTier = () => {
+    if (!user) return 'Free';
+    if (!userProfile || !userProfile.plan) return 'Free';
+    const plan = userProfile.plan.toLowerCase();
+    if (plan.includes('annual') || plan.includes('year') || plan.includes('299')) return 'Yearly';
+    if (plan.includes('month') || plan.includes('29.99')) return 'Monthly';
+    if (plan.includes('trial')) return 'Free Trial';
+    return 'Free';
+  };
+
+  const renderPlanTierBadge = () => {
+    const tier = getPlanTier();
+    let bg = 'bg-gray-500/10 border-gray-500/20 text-gray-400';
+    if (tier === 'Free Trial') bg = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+    if (tier === 'Monthly') bg = 'bg-purple-500/10 border-purple-500/20 text-purple-400 font-bold';
+    if (tier === 'Yearly') bg = 'bg-amber-500/10 border-amber-500/20 text-amber-400 font-bold';
+    
+    return (
+      <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${bg} tracking-wider`}>
+        {tier} Tier
+      </span>
+    );
+  };
+
+  const renderRenewalWarning = () => {
+    if (!user || !userProfile || dismissedRenewalAlert) return null;
+    
+    const tier = getPlanTier();
+    // Only warn for paid plans (Monthly or Yearly)
+    if (tier !== 'Monthly' && tier !== 'Yearly') return null;
+
+    // Current local time: 2026-06-28. Renewal is July 1st, 2026 (3 days away).
+    const renewalDateStr = 'July 1, 2026';
+
+    return (
+      <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-300">
+        <div className="flex items-start gap-3">
+          <div className="p-2 bg-amber-500/10 text-amber-400 rounded-lg mt-0.5 sm:mt-0">
+            <Clock className="w-5 h-5 text-amber-400 animate-pulse" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+              <span>Subscription Auto-Renewal Notice</span>
+              <span className="bg-amber-500/20 text-amber-300 text-[8px] font-mono px-1.5 py-0.5 rounded uppercase font-bold tracking-normal animate-pulse">
+                In 3 Days
+              </span>
+            </h4>
+            <p className="text-[11px] text-gray-300 mt-1">
+              Your <span className="text-white font-bold">{tier}</span> subscription is scheduled to auto-renew on <span className="text-amber-300 font-mono font-bold">{renewalDateStr}</span>.
+            </p>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Your saved payment method will be charged. If you need to update billing info, change plans, or cancel auto-renew, you can do so instantly via the portal.
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+          <button
+            onClick={handleManageSubscription}
+            disabled={portalLoading}
+            className="bg-amber-500 hover:bg-amber-600 text-dark-bg border border-amber-500/10 px-3 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+          >
+            {portalLoading ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <CreditCard className="w-3.5 h-3.5" />
+            )}
+            <span>Manage Payment</span>
+          </button>
+          <button
+            onClick={() => setDismissedRenewalAlert(true)}
+            className="bg-white/5 hover:bg-white/10 text-gray-400 border border-white/10 px-2 py-1.5 rounded text-[10px] font-mono transition-all cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-20 bg-dark-card border border-white/5 rounded-lg">
@@ -411,10 +531,13 @@ export default function SubscriptionHub() {
 
         <div className="flex items-center gap-2">
           {user ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <div className="text-right">
                 <p className="text-[10px] text-gray-400">Logged in as:</p>
-                <p className="text-xs font-bold text-white font-mono">{user.displayName || user.email}</p>
+                <div className="flex items-center gap-2 justify-end">
+                  {renderPlanTierBadge()}
+                  <p className="text-xs font-bold text-white font-mono">{user.displayName || user.email}</p>
+                </div>
               </div>
               <button
                 onClick={() => setCurrentView('profile')}
@@ -459,7 +582,7 @@ export default function SubscriptionHub() {
         <div className="space-y-6">
           {/* Active subscription status if logged in */}
           {user && userProfile && (
-            <div className="p-4 bg-emerald-950/15 border border-emerald-500/20 rounded-lg flex items-center justify-between gap-4">
+            <div className="p-4 bg-emerald-950/15 border border-emerald-500/20 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-full">
                   <ShieldCheck className="w-5 h-5 animate-pulse" />
@@ -469,13 +592,35 @@ export default function SubscriptionHub() {
                   <p className="text-[11px] text-gray-400 mt-0.5">
                     Tier: <span className="text-emerald-400 font-bold font-mono">{userProfile.plan || 'Free Trial'}</span> | Registered to: <span className="text-white font-mono font-medium">{userProfile.email}</span>
                   </p>
+                  {(userProfile.subscriptionStatus || userProfile.planType) && (
+                    <p className="text-[10px] text-gray-500 font-mono mt-0.5">
+                      Status: <span className="text-emerald-400 font-bold uppercase">{userProfile.subscriptionStatus || 'active'}</span> | Billing Cycle: <span className="text-purple-400 font-bold uppercase">{userProfile.planType || 'monthly'}</span>
+                    </p>
+                  )}
                 </div>
               </div>
-              <span className="text-[9px] font-mono text-emerald-400 border border-emerald-500/30 bg-emerald-500/5 px-2 py-0.5 rounded uppercase">
-                Unlimited Access
-              </span>
+              
+              <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end">
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={portalLoading}
+                  className="bg-brand-primary hover:bg-brand-hover text-white border border-brand-primary/20 px-3 py-1.5 rounded text-[10px] font-mono font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {portalLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <CreditCard className="w-3.5 h-3.5" />
+                  )}
+                  <span>Manage Subscription</span>
+                </button>
+                <span className="text-[9px] font-mono text-emerald-400 border border-emerald-500/30 bg-emerald-500/5 px-2 py-1.5 rounded uppercase">
+                  Unlimited Access
+                </span>
+              </div>
             </div>
           )}
+
+          {renderRenewalWarning()}
 
           {/* Pricing cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -898,7 +1043,9 @@ export default function SubscriptionHub() {
 
       {/* VIEW: USER PROFILE / LOGGED IN PANEL */}
       {currentView === 'profile' && user && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-6">
+          {renderRenewalWarning()}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Account Profile Details */}
           <div className="bg-dark-card border border-white/5 p-6 rounded-lg space-y-4">
@@ -922,9 +1069,12 @@ export default function SubscriptionHub() {
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-gray-400">Current Plan Tier:</span>
-                <span className="text-emerald-400 font-mono font-bold uppercase bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[10px]">
-                  {userProfile?.plan || 'Free Trial'}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  {renderPlanTierBadge()}
+                  <span className="text-emerald-400 font-mono font-bold uppercase bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 text-[10px]">
+                    {userProfile?.plan || 'Free Trial'}
+                  </span>
+                </div>
               </div>
               <div className="flex justify-between items-center text-xs">
                 <span className="text-gray-400">Account Established:</span>
@@ -936,12 +1086,25 @@ export default function SubscriptionHub() {
               </div>
             </div>
 
-            <div className="border-t border-white/5 pt-4">
+            <div className="border-t border-white/5 pt-4 space-y-2">
+              <button
+                onClick={handleManageSubscription}
+                disabled={portalLoading}
+                className="w-full bg-brand-primary hover:bg-brand-hover text-white py-2 rounded text-xs font-mono font-bold uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
+              >
+                {portalLoading ? (
+                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <CreditCard className="w-4 h-4" />
+                )}
+                <span>Manage Payment & Plan</span>
+              </button>
+              
               <button
                 onClick={() => setCurrentView('plans')}
                 className="w-full bg-white/5 hover:bg-white/10 text-white border border-white/10 py-2 rounded text-xs font-mono font-bold uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1"
               >
-                <span>View Subscription Plans</span>
+                <span>View All Pricing Plans</span>
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1013,6 +1176,7 @@ export default function SubscriptionHub() {
           </div>
 
         </div>
+      </div>
       )}
 
     </div>

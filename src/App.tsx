@@ -318,6 +318,7 @@ Processed command safely: **${text}**.
         systemStatus={systemStatus} 
         isCollapsed={isCollapsed}
         setIsCollapsed={setIsCollapsed}
+        userProfile={userProfile}
       />
 
       {/* Main Panel Content Area */}
