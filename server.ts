@@ -95,6 +95,57 @@ async function updateUserPlanByEmail(email: string, planName: string, subscripti
   }
 }
 
+async function updateUserPlanById(userId: string, planName: string, subscriptionStatus?: string, planType?: string, subscriptionId?: string) {
+  if (!db) {
+    console.warn("Firebase DB is not initialized. Cannot update user plan.");
+    return false;
+  }
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    
+    // Determine status and type values to write
+    let statusValue = subscriptionStatus;
+    let typeValue = planType;
+
+    if (!statusValue) {
+      if (planName === 'None' || planName.toLowerCase().includes('none')) {
+        statusValue = 'inactive';
+      } else if (planName.toLowerCase().includes('trial')) {
+        statusValue = 'trialing';
+      } else {
+        statusValue = 'active';
+      }
+    }
+
+    if (!typeValue) {
+      if (planName === 'None' || planName.toLowerCase().includes('none')) {
+        typeValue = 'none';
+      } else if (planName.toLowerCase().includes('trial')) {
+        typeValue = 'trial';
+      } else if (planName.toLowerCase().includes('year') || planName.toLowerCase().includes('annual')) {
+        typeValue = 'yearly';
+      } else {
+        typeValue = 'monthly';
+      }
+    }
+
+    await updateDoc(userDocRef, {
+      plan: planName,
+      subscriptionStatus: statusValue,
+      subscription_status: statusValue,
+      planType: typeValue,
+      plan_type: typeValue,
+      subscriptionId: subscriptionId || null,
+      subscription_id: subscriptionId || null
+    });
+    console.log(`Successfully updated plan for user document ID ${userId} to: ${planName} (type: ${typeValue}, status: ${statusValue}, subId: ${subscriptionId})`);
+    return true;
+  } catch (err) {
+    console.error(`Error updating user plan by document ID ${userId}:`, err);
+    return false;
+  }
+}
+
 // Lazy initializer for Stripe SDK to avoid startup crashes if key is missing
 let stripeClient: Stripe | null = null;
 function getStripeClient(): Stripe {
@@ -530,16 +581,16 @@ app.get('/api/stripe/config', (req, res) => {
     stripeConfigured: !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '',
     PLAN_MONTHLY_NAME: process.env.PLAN_MONTHLY_NAME || 'AI-BOS Monthly Subscription',
     PLAN_MONTHLY_PRICE: process.env.PLAN_MONTHLY_PRICE || '$29.99/month',
-    STRIPE_PRICE_ID_KEY_MONTHLY: process.env.STRIPE_PRICE_ID_KEY_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU',
+    STRIPE_PRICE_ID_KEY_MONTHLY: process.env.STRIPE_PRICE_ID_KEY_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU',
     PLAN_YEARLY_NAME: process.env.PLAN_YEARLY_NAME || 'AI-BOS Annual Subscription',
     PLAN_YEARLY_PRICE: process.env.PLAN_YEARLY_PRICE || '$299.99/year',
-    STRIPE_PRICE_ID_KEY_YEARLY: process.env.STRIPE_PRICE_ID_KEY_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO'
+    STRIPE_PRICE_ID_KEY_YEARLY: process.env.STRIPE_PRICE_ID_KEY_YEARLY || process.env.STRIPE_PRICE_ID_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO'
   });
 });
 
 // Original checkout session creator for React SubscriptionHub
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
-  const { priceId, email, planName } = req.body;
+  const { priceId, email, planName, userId } = req.body;
   const hasSecret = !!process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== '';
 
   if (!hasSecret) {
@@ -548,6 +599,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     return res.json({
       success: true,
       simulated: true,
+      id: simulatedSessionId,
       url: checkoutUrl,
       message: 'STRIPE_SECRET_KEY is missing. Operating under high-fidelity sandbox simulation.'
     });
@@ -555,6 +607,11 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
 
   try {
     const stripe = getStripeClient();
+    const hostOrigin = `${req.protocol}://${req.get('host')}`;
+    const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost:5173')) 
+      ? process.env.FRONTEND_URL 
+      : hostOrigin;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -565,14 +622,15 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       ],
       mode: 'subscription',
       customer_email: email,
+      client_reference_id: userId,
       metadata: {
         email: email,
         planName: planName
       },
-      success_url: `${req.protocol}://${req.get('host')}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
-      cancel_url: `${req.protocol}://${req.get('host')}/?session_id=cancelled`,
+      success_url: `${frontendUrl}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
+      cancel_url: `${frontendUrl}/?session_id=cancelled`,
     });
-    res.json({ success: true, url: session.url, simulated: false });
+    res.json({ success: true, id: session.id, url: session.url, simulated: false });
   } catch (err: any) {
     console.error('Stripe session creation failure:', err);
     res.status(400).json({ success: false, error: err.message });
@@ -586,15 +644,15 @@ CREATE CHECKOUT SESSION (User Format)
 */
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
-    const { plan, email } = req.body;
+    const { plan, email, userId } = req.body;
     let priceId;
     let planName = 'AI-BOS Subscription';
 
     if (plan === "monthly") {
-      priceId = process.env.STRIPE_PRICE_ID_KEY_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU';
+      priceId = process.env.STRIPE_PRICE_ID_KEY_MONTHLY || process.env.STRIPE_PRICE_ID_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU';
       planName = process.env.PLAN_MONTHLY_NAME || 'AI-BOS Monthly Subscription';
     } else if (plan === "yearly") {
-      priceId = process.env.STRIPE_PRICE_ID_KEY_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO';
+      priceId = process.env.STRIPE_PRICE_ID_KEY_YEARLY || process.env.STRIPE_PRICE_ID_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO';
       planName = process.env.PLAN_YEARLY_NAME || 'AI-BOS Annual Subscription';
     } else {
       return res.status(400).json({
@@ -607,6 +665,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
       const simulatedSessionId = `cs_test_simulated_${Math.random().toString(36).substring(2, 10)}`;
       const checkoutUrl = `/?session_id=${simulatedSessionId}&plan=${encodeURIComponent(planName)}`;
       return res.json({
+        id: simulatedSessionId,
         url: checkoutUrl,
         simulated: true,
         message: 'STRIPE_SECRET_KEY is missing. Operating under high-fidelity sandbox simulation.'
@@ -614,6 +673,11 @@ app.post("/api/create-checkout-session", async (req, res) => {
     }
 
     const stripe = getStripeClient();
+    const hostOrigin = `${req.protocol}://${req.get('host')}`;
+    const frontendUrl = (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost:5173')) 
+      ? process.env.FRONTEND_URL 
+      : hostOrigin;
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "subscription",
@@ -624,16 +688,20 @@ app.post("/api/create-checkout-session", async (req, res) => {
         }
       ],
       customer_email: email,
+      client_reference_id: userId,
       metadata: {
         email: email,
         planName: planName
       },
-      success_url: `${req.protocol}://${req.get('host')}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
-      cancel_url: `${req.protocol}://${req.get('host')}/?session_id=cancelled`
+      success_url: `${frontendUrl}/?session_id={CHECKOUT_SESSION_ID}&plan=${encodeURIComponent(planName)}`,
+      cancel_url: `${frontendUrl}/?session_id=cancelled`
     });
 
     res.json({
-      url: session.url
+      id: session.id,
+      url: session.url,
+      success: true,
+      simulated: false
     });
   } catch (error: any) {
     console.error(error);
@@ -697,7 +765,7 @@ app.post('/api/stripe/create-portal-session', async (req, res) => {
 WEBHOOK (User Format)
 ========================================
 */
-app.post("/api/stripe-webhook", async (req: any, res) => {
+const webhookHandler = async (req: any, res: any) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -726,11 +794,17 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as any;
+      const clientReferenceId = session.client_reference_id;
       const email = session.metadata?.email || session.customer_email || session.customer_details?.email;
       const planName = session.metadata?.planName || 'Monthly Subscription ($29.99)';
       const subscriptionId = session.subscription;
-      console.log(`Subscription activated for ${email} -> ${planName} (ID: ${subscriptionId})`);
-      if (email) {
+      console.log(`Subscription activated for ${clientReferenceId || email} -> ${planName} (ID: ${subscriptionId})`);
+      
+      let updated = false;
+      if (clientReferenceId) {
+        updated = await updateUserPlanById(clientReferenceId, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subscriptionId);
+      }
+      if (!updated && email) {
         await updateUserPlanByEmail(email, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subscriptionId);
       }
       break;
@@ -762,7 +836,8 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
         const email = customer.email;
         const priceId = subscription.items?.data?.[0]?.price?.id;
         let planName = 'Monthly Subscription ($29.99)';
-        if (priceId === process.env.STRIPE_PRICE_ID_KEY_YEARLY) {
+        const yearlyPriceId = process.env.STRIPE_PRICE_ID_KEY_YEARLY || process.env.STRIPE_PRICE_ID_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO';
+        if (priceId === yearlyPriceId) {
           planName = 'Yearly Subscription ($299.99)';
         }
         console.log(`Subscription updated for customer ID: ${customerId} (${email}) to: ${planName}`);
@@ -794,7 +869,10 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
   }
 
   res.json({ received: true });
-});
+};
+
+app.post("/api/stripe-webhook", webhookHandler);
+app.post("/api/webhook", webhookHandler);
 
 // Bootstrap development or production mode
 async function startServer() {

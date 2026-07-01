@@ -64,6 +64,9 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
     }
   };
 
+  const monthlyPriceId = (import.meta as any).env?.VITE_STRIPE_PRICE_ID_MONTHLY || 'price_1Tn6AtBMbxh6jv0C7guuFzrU';
+  const yearlyPriceId = (import.meta as any).env?.VITE_STRIPE_PRICE_ID_YEARLY || 'price_1Tn6AtBMbxh6jv0CziPOztxO';
+
   return (
     <div className="flex flex-col items-center justify-center p-6 md:p-12 min-h-[75vh] bg-dark-card/30 border border-white/5 rounded-2xl max-w-4xl mx-auto space-y-8 animate-fade-in relative overflow-hidden">
       {/* Decorative gradients */}
@@ -84,7 +87,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
           Unlock {tabName}
         </h2>
         <p className="text-xs md:text-sm text-gray-400 max-w-lg mx-auto leading-relaxed">
-          The operation you are trying to access requires an active corporate subscription. Instantly activate a 14-day free trial or subscribe to one of our competitive pricing tiers to unlock unlimited access.
+          The operation you are trying to access requires an active corporate subscription. Instantly activate a 7-day free trial or subscribe to one of our competitive pricing tiers to unlock unlimited access.
         </p>
       </div>
 
@@ -121,7 +124,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
 
           <div className="pt-6">
             <button
-              onClick={() => handleSubscribe('monthly', 'price_1Tn6AtBMbxh6jv0C7guuFzrU', 'Monthly Subscription ($29.99)')}
+              onClick={() => handleSubscribe('monthly', monthlyPriceId, 'Monthly Subscription ($29.99)')}
               disabled={loading !== null}
               className="w-full py-2.5 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-lg text-xs font-mono font-bold uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5"
             >
@@ -172,7 +175,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
 
           <div className="pt-6">
             <button
-              onClick={() => handleSubscribe('yearly', 'price_1Tn6AtBMbxh6jv0CziPOztxO', 'Yearly Subscription ($299.99)')}
+              onClick={() => handleSubscribe('yearly', yearlyPriceId, 'Yearly Subscription ($299.99)')}
               disabled={loading !== null}
               className="w-full py-2.5 bg-brand-primary hover:bg-brand-hover text-white rounded-lg text-xs font-mono font-bold uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow"
             >
@@ -194,7 +197,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
       <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10 border-t border-white/5 pt-6 w-full max-w-2xl justify-between text-xs">
         <div className="text-center sm:text-left">
           <p className="text-gray-400">First time trying AI-BOS?</p>
-          <p className="text-[10px] text-gray-500 font-mono mt-0.5">Unlock a fully functional 14-day trial, no credit card required.</p>
+          <p className="text-[10px] text-gray-500 font-mono mt-0.5">Unlock a fully functional 7-day trial, no credit card required.</p>
         </div>
 
         <div className="flex items-center gap-3">
