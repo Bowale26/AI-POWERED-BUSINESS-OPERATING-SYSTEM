@@ -38,7 +38,7 @@ interface SidebarProps {
   };
   isCollapsed: boolean;
   setIsCollapsed: (collapsed: boolean) => void;
-  userProfile?: { plan: string; name: string; email?: string } | null;
+  userProfile?: { plan: string; name: string; email?: string; joinedAt?: string } | null;
 }
 
 export default function Sidebar({ activeTab, setActiveTab, systemStatus, isCollapsed, setIsCollapsed, userProfile }: SidebarProps) {
@@ -165,9 +165,25 @@ export default function Sidebar({ activeTab, setActiveTab, systemStatus, isColla
                   } else if (plan.includes('month') || plan.includes('29.99')) {
                     tier = 'Monthly';
                     style = 'bg-purple-500/15 border-purple-500/25 text-purple-400 font-bold';
-                  } else if (plan.includes('trial')) {
-                    tier = 'Free Trial';
-                    style = 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 font-bold';
+                  } else if (plan.includes('trial') || plan === 'none' || plan === '') {
+                    const joinedAt = userProfile?.joinedAt;
+                    let isExpired = false;
+                    let daysLeft = 7;
+                    if (joinedAt) {
+                      const joinedTime = new Date(joinedAt).getTime();
+                      const trialLengthMs = 7 * 24 * 60 * 60 * 1000;
+                      const now = new Date().getTime();
+                      isExpired = now > (joinedTime + trialLengthMs);
+                      daysLeft = Math.max(0, Math.ceil(((joinedTime + trialLengthMs) - now) / (24 * 60 * 60 * 1000)));
+                    }
+                    
+                    if (isExpired) {
+                      tier = 'Trial Expired';
+                      style = 'bg-rose-500/15 border-rose-500/25 text-rose-400 font-bold animate-pulse';
+                    } else {
+                      tier = `Trial (${daysLeft}d)`;
+                      style = 'bg-emerald-500/15 border-emerald-500/25 text-emerald-400 font-bold';
+                    }
                   }
                   
                   return (
