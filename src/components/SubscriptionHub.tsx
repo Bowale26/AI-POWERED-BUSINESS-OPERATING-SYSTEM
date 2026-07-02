@@ -430,18 +430,7 @@ export default function SubscriptionHub() {
     const plan = userProfile.plan.toLowerCase();
     if (plan.includes('annual') || plan.includes('year') || plan.includes('299')) return 'Yearly';
     if (plan.includes('month') || plan.includes('29.99')) return 'Monthly';
-    if (plan.includes('trial') || plan === 'none' || plan === '') {
-      const joinedAt = userProfile.joinedAt;
-      if (joinedAt) {
-        const joinedTime = new Date(joinedAt).getTime();
-        const trialLengthMs = 7 * 24 * 60 * 60 * 1000;
-        const now = new Date().getTime();
-        if (now > (joinedTime + trialLengthMs)) {
-          return 'Trial Expired';
-        }
-      }
-      return 'Free Trial';
-    }
+    if (plan.includes('trial')) return 'Free Trial';
     return 'Free';
   };
 
@@ -451,85 +440,11 @@ export default function SubscriptionHub() {
     if (tier === 'Free Trial') bg = 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
     if (tier === 'Monthly') bg = 'bg-purple-500/10 border-purple-500/20 text-purple-400 font-bold';
     if (tier === 'Yearly') bg = 'bg-amber-500/10 border-amber-500/20 text-amber-400 font-bold';
-    if (tier === 'Trial Expired') bg = 'bg-rose-500/10 border-rose-500/20 text-rose-400 font-bold animate-pulse';
     
     return (
       <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${bg} tracking-wider`}>
-        {tier}
+        {tier} Tier
       </span>
-    );
-  };
-
-  const renderTrialExpirationWarning = () => {
-    if (!user || !userProfile) return null;
-    
-    const tier = getPlanTier();
-    if (tier !== 'Free Trial' && tier !== 'Trial Expired') return null;
-    
-    const joinedAt = userProfile.joinedAt;
-    if (!joinedAt) return null;
-    
-    const joinedTime = new Date(joinedAt).getTime();
-    const trialLengthMs = 7 * 24 * 60 * 60 * 1000;
-    const trialEndTime = joinedTime + trialLengthMs;
-    const now = new Date().getTime();
-    
-    const timeLeftMs = trialEndTime - now;
-    if (timeLeftMs <= 0) {
-      return (
-        <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-300">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-rose-500/10 text-rose-400 rounded-lg">
-              <Clock className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wider font-mono">
-                Your 7-Day Free Trial Has Expired
-              </h4>
-              <p className="text-[11px] text-gray-300 mt-1">
-                Your trial access ended on <span className="text-white font-mono font-bold">{new Date(trialEndTime).toLocaleDateString()}</span>.
-              </p>
-              <p className="text-[10px] text-gray-400 mt-0.5">
-                To regain immediate full access to all features of the AI-POWERED BUSINESS OPERATING SYSTEM, please select a subscription plan below.
-              </p>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    
-    const daysLeft = Math.ceil(timeLeftMs / (24 * 60 * 60 * 1000));
-    const exactDays = Math.floor(timeLeftMs / (24 * 60 * 60 * 1000));
-    const hoursLeft = Math.floor((timeLeftMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    
-    const isUrgent = daysLeft <= 3;
-    
-    let borderClass = isUrgent ? 'border-amber-500/20 bg-amber-500/10' : 'border-emerald-500/20 bg-emerald-500/5';
-    let textClass = isUrgent ? 'text-amber-400' : 'text-emerald-400';
-    let badgeClass = isUrgent ? 'bg-amber-500/20 text-amber-300 animate-pulse' : 'bg-emerald-500/20 text-emerald-300';
-    
-    return (
-      <div className={`p-4 ${borderClass} rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-300`}>
-        <div className="flex items-start gap-3">
-          <div className={`p-2 ${isUrgent ? 'bg-amber-500/10' : 'bg-emerald-500/10'} ${textClass} rounded-lg`}>
-            <Clock className="w-5 h-5 animate-pulse" />
-          </div>
-          <div>
-            <h4 className={`text-xs font-bold ${textClass} uppercase tracking-wider font-mono flex items-center gap-1.5`}>
-              <span>Free Trial Active</span>
-              <span className={`${badgeClass} text-[8px] font-mono px-1.5 py-0.5 rounded uppercase font-bold tracking-normal`}>
-                {exactDays > 0 ? `${exactDays}d ${hoursLeft}h left` : `${hoursLeft}h left`}
-              </span>
-            </h4>
-            <p className="text-[11px] text-gray-300 mt-1">
-              You are currently on the <span className="text-white font-bold">7-Day Free Trial</span>. You have full access to all platform features until <span className="text-white font-mono font-bold">{new Date(trialEndTime).toLocaleDateString()}</span>.
-            </p>
-            <p className="text-[10px] text-gray-400 mt-0.5">
-              Select one of our premium plans below to seamlessly transition after your trial expires. You won't be charged until the trial period is over.
-            </p>
-          </div>
-        </div>
-      </div>
     );
   };
 
@@ -706,7 +621,6 @@ export default function SubscriptionHub() {
           )}
 
           {renderRenewalWarning()}
-          {renderTrialExpirationWarning()}
 
           {/* Pricing cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -726,12 +640,12 @@ export default function SubscriptionHub() {
                     </span>
                   )}
                 </div>
-                <h3 className="text-base font-bold text-white font-display">7-Day Free Trial</h3>
+                <h3 className="text-base font-bold text-white font-display">14-Day Free Trial</h3>
                 <p className="text-[11px] text-gray-400 mt-1">Full-featured sandbox access for testing executive intelligence.</p>
                 
                 <div className="my-5 flex items-baseline gap-1">
                   <span className="text-2xl font-bold font-display text-white">$0.00</span>
-                  <span className="text-[10px] text-gray-500">/ 7 days</span>
+                  <span className="text-[10px] text-gray-500">/ 14 days</span>
                 </div>
 
                 <div className="space-y-2.5 border-t border-white/5 pt-4">
@@ -1131,7 +1045,6 @@ export default function SubscriptionHub() {
       {currentView === 'profile' && user && (
         <div className="space-y-6">
           {renderRenewalWarning()}
-          {renderTrialExpirationWarning()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* Account Profile Details */}

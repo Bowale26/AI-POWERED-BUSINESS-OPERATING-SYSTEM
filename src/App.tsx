@@ -83,98 +83,15 @@ function AppContent() {
     return () => unsubscribe();
   }, []);
 
-  const hasActivePlan = (() => {
-    if (!userProfile) return false;
-    const plan = userProfile.plan || '';
-    
-    // Check if they are a paid subscriber
-    const isPaid = (
-      plan === 'Monthly Subscription ($29.99)' ||
-      plan === 'Yearly Subscription ($299.99)' ||
-      plan === 'AI-BOS Monthly Subscription' ||
-      plan === 'AI-BOS Annual Subscription' ||
-      plan.toLowerCase().includes('subscription')
-    );
-    if (isPaid) return true;
-    
-    // Check if they are in an active free trial (7 days limit)
-    const isTrial = plan === 'Free Trial' || plan.toLowerCase().includes('trial') || plan === 'None';
-    if (isTrial) {
-      const joinedAt = userProfile.joinedAt;
-      if (!joinedAt) return true; // Fallback to active trial if joinedAt missing
-      
-      const joinedTime = new Date(joinedAt).getTime();
-      const trialLengthMs = 7 * 24 * 60 * 60 * 1000;
-      const now = new Date().getTime();
-      const isExpired = now > (joinedTime + trialLengthMs);
-      return !isExpired;
-    }
-    
-    return false;
-  })();
-
-  // Automatically restrict further access and redirect the user to the Subscription & Billing page immediately upon trial expiration
-  useEffect(() => {
-    if (user && userProfile && !hasActivePlan) {
-      if (activeTab !== 'subscription') {
-        setActiveTab('subscription');
-        localStorage.setItem('ai_bos_active_tab', 'subscription');
-        addSystemLog('warn', 'Security', 'Free trial has expired. Restricting access and redirecting to subscription management.');
-      }
-    }
-  }, [user, userProfile, hasActivePlan, activeTab]);
-
-  const renderGlobalTrialBanner = () => {
-    if (!user || !userProfile) return null;
-    const plan = userProfile.plan || '';
-    const isPaid = (
-      plan === 'Monthly Subscription ($29.99)' ||
-      plan === 'Yearly Subscription ($299.99)' ||
-      plan === 'AI-BOS Monthly Subscription' ||
-      plan === 'AI-BOS Annual Subscription' ||
-      plan.toLowerCase().includes('subscription')
-    );
-    if (isPaid) return null;
-
-    const isTrial = plan === 'Free Trial' || plan.toLowerCase().includes('trial') || plan === 'None';
-    if (!isTrial) return null;
-
-    const joinedAt = userProfile.joinedAt;
-    if (!joinedAt) return null;
-
-    const joinedTime = new Date(joinedAt).getTime();
-    const trialLengthMs = 7 * 24 * 60 * 60 * 1000;
-    const trialEndTime = joinedTime + trialLengthMs;
-    const now = new Date().getTime();
-
-    const timeLeftMs = trialEndTime - now;
-    if (timeLeftMs <= 0) return null; // Fully expired, handled by automatic redirect and subscription tab warnings
-
-    const daysLeft = Math.ceil(timeLeftMs / (24 * 60 * 60 * 1000));
-    const exactDays = Math.floor(timeLeftMs / (24 * 60 * 60 * 1000));
-    const hoursLeft = Math.floor((timeLeftMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-
-    // Show warning banner if trial has <= 3 days left (advance notification)
-    if (daysLeft > 3) return null;
-
-    return (
-      <div className="bg-gradient-to-r from-amber-500/10 via-amber-600/10 to-transparent border border-amber-500/20 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-300">
-        <div className="flex items-center gap-2 text-amber-400">
-          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping inline-block shrink-0" />
-          <span>
-            <strong>Trial Ending Soon:</strong> Your 7-Day Free Trial has <strong>{exactDays > 0 ? `${exactDays}d ${hoursLeft}h` : `${hoursLeft}h`}</strong> remaining.
-            Upgrade to a monthly or annual billing cycle to secure your AI-POWERED BUSINESS OPERATING SYSTEM workspace database.
-          </span>
-        </div>
-        <button
-          onClick={() => setActiveTab('subscription')}
-          className="bg-amber-500/25 hover:bg-amber-500/35 border border-amber-500/40 text-amber-300 px-3 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wide cursor-pointer transition-all shrink-0"
-        >
-          Upgrade Now
-        </button>
-      </div>
-    );
-  };
+  const hasActivePlan = !!userProfile && (
+    userProfile.plan === 'Free Trial' ||
+    userProfile.plan === 'Monthly Subscription ($29.99)' ||
+    userProfile.plan === 'Yearly Subscription ($299.99)' ||
+    userProfile.plan === 'AI-BOS Monthly Subscription' ||
+    userProfile.plan === 'AI-BOS Annual Subscription' ||
+    userProfile.plan.includes('Subscription') ||
+    userProfile.plan.includes('Trial')
+  );
 
   const isPremiumTab = activeTab !== 'welcome' && activeTab !== 'subscription' && activeTab !== 'stopwatch';
 
@@ -511,7 +428,6 @@ Processed command safely: **${text}**.
 
         {/* Dynamic Tab Workspace Body */}
         <div className="p-4 flex-1 max-w-7xl w-full mx-auto space-y-4">
-          {renderGlobalTrialBanner()}
           {isPremiumTab && !hasActivePlan ? (
             <PremiumPaywall 
               user={user}
