@@ -451,60 +451,8 @@ Processed command safely: **${text}**.
               <span>Tour Guide</span>
             </button>
             <div className="h-4 w-[1px] bg-white/5" />
-            <div className="flex items-center gap-3.5 text-[10px] text-gray-400 font-mono">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
-                <span>SYSTEM: <strong className="text-emerald-400">OPTIMIZED</strong></span>
-              </div>
-              <div className="h-3.5 w-[1px] bg-white/10" />
-              <div className="flex items-center gap-1.5" title={isOnline ? "Real-time sync to Firebase is active" : "Internet connection lost. Firebase sync is interrupted."}>
-                {isOnline ? (
-                  <>
-                    <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>SYNC: <strong className="text-emerald-400">ACTIVE</strong></span>
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-                    <span>SYNC: <strong className="text-rose-400 font-bold">INTERRUPTED</strong></span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="h-4 w-[1px] bg-white/5" />
-
-            {/* Session Battery Resource indicator */}
-            <div className="flex items-center gap-2 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/5 rounded-md text-[10px] font-mono select-none transition-all cursor-pointer relative group shrink-0"
-                 title="Est. Resource Level (API usage & session duration)">
-              <BatteryIcon className={`w-4 h-4 ${batteryTextColor} ${batteryPercent <= 25 ? 'animate-pulse' : ''}`} />
-              <div className="flex flex-col leading-none">
-                <span className="text-gray-400 font-bold text-[9px]">BATTERY: <strong className={batteryTextColor}>{batteryPercent}%</strong></span>
-                <span className="text-gray-500 text-[8px] mt-0.5">Uptime: {formatElapsedTime(elapsedSeconds)}</span>
-              </div>
-              
-              {/* Tooltip detail on hover */}
-              <div className="absolute right-0 top-full mt-2 w-56 bg-dark-panel border border-white/10 p-3 rounded shadow-2xl hidden group-hover:block z-50 text-[10.5px] leading-relaxed text-gray-300">
-                <div className="font-bold border-b border-white/5 pb-1.5 mb-1.5 text-white flex items-center justify-between">
-                  <span>Session Battery Log</span>
-                  <span className={`px-1.5 py-px text-[8px] font-bold uppercase rounded border ${batteryTextColor} ${batteryBorderColor} ${batteryBgColor}`}>
-                    {batteryLabel}
-                  </span>
-                </div>
-                <div className="space-y-1 font-mono text-[9.5px]">
-                  <p>⚡ <span className="text-gray-400">Agent Energy:</span> <strong className={batteryTextColor}>{batteryPercent}%</strong></p>
-                  <p>⏱️ <span className="text-gray-400">Uptime:</span> <strong className="text-blue-400">{formatElapsedTime(elapsedSeconds)}</strong></p>
-                  <p>🤖 <span className="text-gray-400">API Key Queries:</span> <strong className="text-purple-400">{apiCallCount} calls</strong></p>
-                </div>
-                <div className="border-t border-white/5 mt-2 pt-1.5 text-[8.5px] text-gray-500 leading-normal">
-                  Estimates token capacity by weighing background telemetry execution cycles and active API invocations.
-                </div>
-              </div>
-            </div>
-
-            <div className="h-4 w-[1px] bg-white/5" />
             <div className="text-[10px] text-gray-500 font-mono">
-              Region: <strong className="text-gray-400 font-bold">US-WEST2</strong>
+              Workspace Dashboard
             </div>
           </div>
         </header>

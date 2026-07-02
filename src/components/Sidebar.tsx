@@ -142,16 +142,6 @@ export default function Sidebar({ activeTab, setActiveTab, systemStatus, isColla
           {/* Status Sub-Bar */}
           {!isCollapsed && (
             <div className="mt-2.5 space-y-1.5">
-              <div className="p-2 bg-dark-bg/60 rounded border border-white/5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-[9px] text-gray-400">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                  <span>SYSTEM ONLINE</span>
-                </span>
-                <span className="text-[9px] font-mono text-blue-400 bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
-                  {systemStatus.efficiency} EFF
-                </span>
-              </div>
-              
               <div className="p-2 bg-dark-bg/40 rounded border border-white/5 flex items-center justify-between gap-2">
                 <span className="text-[9px] text-gray-400 font-mono">WORKSPACE TIER</span>
                 {(() => {
@@ -205,32 +195,10 @@ export default function Sidebar({ activeTab, setActiveTab, systemStatus, isColla
         </nav>
       </div>
 
-      {/* Footer / Telemetry indicators */}
-      {!isCollapsed ? (
-        <div className="p-3 bg-dark-bg m-2.5 rounded border border-white/5 space-y-2 shrink-0">
-          <div className="flex justify-between items-center text-[10px] text-gray-500 font-mono">
-            <span>AI AGENT LOAD</span>
-            <span className="text-blue-400">42%</span>
-          </div>
-          <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
-            <div className="h-full bg-brand-primary w-[42%]"></div>
-          </div>
-          <div className="pt-2 border-t border-white/5 flex flex-col gap-1 text-[9px] text-gray-500 font-mono">
-            <div className="flex justify-between">
-              <span>MODEL</span>
-              <span className="text-gray-300">gemini-3.1-pro-preview</span>
-            </div>
-            <div className="flex justify-between">
-              <span>API KEY</span>
-              <span className={systemStatus.geminiKeyConfigured ? 'text-emerald-400 font-semibold' : 'text-amber-500 font-semibold'}>
-                {systemStatus.geminiKeyConfigured ? 'CONNECTED' : 'PROXIED'}
-              </span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="p-3 flex justify-center items-center">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse border border-emerald-400 shadow-sm" title="System Online (98.4% Efficiency)" />
+      {/* Footer */}
+      {!isCollapsed && (
+        <div className="p-3 text-[9px] text-gray-500 font-mono text-center shrink-0">
+          © 2026 CRM ORCHESTRATOR
         </div>
       )}
     </aside>

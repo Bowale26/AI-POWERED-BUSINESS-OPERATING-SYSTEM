@@ -920,17 +920,7 @@ export default function ChatbotRail({ chatHistory, onSendMessage, isLoading, onC
             </div>
           )}
 
-          {/* Performance Telemetry Meter */}
-          <div className="flex justify-between items-center text-[8px] font-mono text-slate-400 border-t border-slate-100 pt-1.5 px-0.5">
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              SYSTEM ACTIVE
-            </span>
-            <span>
-              TTFT: <strong className="text-slate-600">{currentTtft ? `${currentTtft}ms` : '--'}</strong> | 
-              Latency: <strong className="text-slate-600">{currentTotal ? `${currentTotal}ms` : '--'}</strong>
-            </span>
-          </div>
+          {/* Clean Footer */}
         </div>
       </div>
 
