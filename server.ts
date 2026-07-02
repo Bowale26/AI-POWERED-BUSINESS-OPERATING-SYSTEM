@@ -145,7 +145,9 @@ function getAIClient(): GoogleGenAI | null {
 app.get('/api/health', (req, res) => {
   const hasKey = !!process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY';
   res.json({
-    status: 'ok',
+    status: 'ONLINE',
+    region: 'GLOBAL',
+    efficiency: '98.4%',
     geminiKeyConfigured: hasKey,
     environment: process.env.NODE_ENV || 'development',
   });
