@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppTab, ChatMessage } from './types';
-import { HelpCircle, Sun, Moon, Wifi, WifiOff, Battery, BatteryMedium, BatteryLow } from 'lucide-react';
+import { HelpCircle, Sun, Moon, Wifi, WifiOff, Battery, BatteryMedium, BatteryLow, ShieldAlert } from 'lucide-react';
 import { NotificationProvider } from './components/NotificationProvider';
 import GlobalSearch from './components/GlobalSearch';
 import Sidebar from './components/Sidebar';
@@ -59,11 +59,21 @@ function AppContent() {
   const [authLoading, setAuthLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      
+      // Clean up previous snapshot listener if it exists
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (currentUser) {
+        setAuthLoading(true);
         const docRef = doc(db, 'users', currentUser.uid);
-        const unsubProfile = onSnapshot(docRef, (snapshot) => {
+        unsubProfile = onSnapshot(docRef, (snapshot) => {
           if (snapshot.exists()) {
             setUserProfile(snapshot.data() as any);
           } else {
@@ -74,26 +84,69 @@ function AppContent() {
           console.error("Error loading user profile in App:", error);
           setAuthLoading(false);
         });
-        return () => unsubProfile();
       } else {
         setUserProfile(null);
         setAuthLoading(false);
       }
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, []);
 
+  const getTrialStatus = () => {
+    if (!userProfile) return { active: false, daysLeft: 0, expired: false, hasTrial: false, daysElapsed: 0 };
+    const planName = userProfile.plan || '';
+    const isTrial = planName === 'Free Trial' || planName.toLowerCase().includes('trial');
+    if (!isTrial) return { active: false, daysLeft: 0, expired: false, hasTrial: false, daysElapsed: 0 };
+
+    const joinedDateStr = userProfile.joinedAt || userProfile.trialStartedAt || new Date().toISOString();
+    const joinedTime = new Date(joinedDateStr).getTime();
+    const currentTime = new Date().getTime();
+    const elapsedMs = currentTime - joinedTime;
+    const elapsedDays = elapsedMs / (1000 * 60 * 60 * 24);
+    
+    const trialDurationDays = 7; // Strictly 7-Day Free Trial Policy
+    const daysLeft = Math.max(0, trialDurationDays - elapsedDays);
+    const expired = elapsedDays >= trialDurationDays;
+
+    return {
+      active: !expired,
+      daysLeft: parseFloat(daysLeft.toFixed(1)),
+      expired,
+      hasTrial: true,
+      daysElapsed: parseFloat(elapsedDays.toFixed(1))
+    };
+  };
+
+  const trialStatus = getTrialStatus();
+
   const hasActivePlan = !!userProfile && (
-    userProfile.plan === 'Free Trial' ||
-    userProfile.plan === 'Monthly Subscription ($29.99)' ||
-    userProfile.plan === 'Yearly Subscription ($299.99)' ||
-    userProfile.plan === 'AI-BOS Monthly Subscription' ||
-    userProfile.plan === 'AI-BOS Annual Subscription' ||
-    userProfile.plan.includes('Subscription') ||
-    userProfile.plan.includes('Trial')
+    (trialStatus.hasTrial && !trialStatus.expired) ||
+    (!trialStatus.hasTrial && (
+      userProfile.plan === 'Monthly Subscription ($29.99)' ||
+      userProfile.plan === 'Yearly Subscription ($299.99)' ||
+      userProfile.plan === 'AI-BOS Monthly Subscription' ||
+      userProfile.plan === 'AI-BOS Annual Subscription' ||
+      userProfile.plan.includes('Subscription')
+    ))
   );
 
   const isPremiumTab = activeTab !== 'welcome' && activeTab !== 'subscription' && activeTab !== 'stopwatch';
+
+  // Automatically restrict further access and redirect the user immediately upon trial expiration.
+  useEffect(() => {
+    if (userProfile && trialStatus.hasTrial && trialStatus.expired) {
+      if (activeTab !== 'subscription') {
+        setActiveTab('subscription');
+        addSystemLog('warn', 'Subscription System', 'Free trial has expired. Redirecting to billing page.');
+      }
+    }
+  }, [userProfile?.plan, userProfile?.joinedAt, trialStatus.expired, activeTab]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -428,6 +481,57 @@ Processed command safely: **${text}**.
 
         {/* Dynamic Tab Workspace Body */}
         <div className="p-4 flex-1 max-w-7xl w-full mx-auto space-y-4">
+          {/* Free Trial Banner / Advance Expiration Notifications */}
+          {userProfile && trialStatus.hasTrial && (
+            <div className={`p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-md ${
+              trialStatus.expired
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-200'
+                : trialStatus.daysLeft <= 2
+                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-200 animate-pulse'
+                  : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-200'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`p-2 rounded-full shrink-0 ${
+                  trialStatus.expired 
+                    ? 'bg-rose-500/20 text-rose-400' 
+                    : trialStatus.daysLeft <= 2
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-emerald-500/20 text-emerald-400'
+                }`}>
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-[12px] leading-tight flex items-center gap-2">
+                    <span>
+                      {trialStatus.expired 
+                        ? '7-Day Free Trial Expired' 
+                        : trialStatus.daysLeft <= 2 
+                          ? 'Action Required: Your Free Trial is Ending Soon' 
+                          : '7-Day Free Trial Active'}
+                    </span>
+                    <span className="text-[9px] font-mono uppercase bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                      {trialStatus.expired ? 'EXPIRED' : `${trialStatus.daysLeft} Days Left`}
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-gray-400 mt-1 leading-normal">
+                    {trialStatus.expired
+                      ? 'Your 7-day trial period has expired. Please select a premium plan to regain access to the AI-Powered Business Operating System.'
+                      : `Your risk-free trial ends on ${new Date(new Date(userProfile.joinedAt || userProfile.trialStartedAt || new Date().toISOString()).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()}. Upgrade to a premium monthly or yearly plan at any time to preserve configuration pipelines.`}
+                  </p>
+                </div>
+              </div>
+              
+              {!trialStatus.expired && activeTab !== 'subscription' && (
+                <button
+                  onClick={() => setActiveTab('subscription')}
+                  className="px-3 py-1.5 bg-brand-primary hover:bg-brand-hover text-white text-[10px] font-mono font-bold uppercase rounded transition-all shrink-0 cursor-pointer text-center"
+                >
+                  Upgrade to Premium
+                </button>
+              )}
+            </div>
+          )}
+
           {isPremiumTab && !hasActivePlan ? (
             <PremiumPaywall 
               user={user}

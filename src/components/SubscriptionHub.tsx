@@ -128,14 +128,25 @@ export default function SubscriptionHub() {
 
   // Track Firebase Auth state changes
   useEffect(() => {
+    let unsubProfile: (() => void) | null = null;
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      
+      // Clean up previous snapshot listener if it exists
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (currentUser) {
+        setAuthLoading(true);
         // Fetch user profile from Firestore to check selected plan
         const docRef = doc(db, 'users', currentUser.uid);
-        const unsubProfile = onSnapshot(docRef, (snapshot) => {
+        unsubProfile = onSnapshot(docRef, (snapshot) => {
           if (snapshot.exists()) {
             setUserProfile(snapshot.data() as any);
+            setAuthLoading(false);
           } else {
             // Create user profile document if it doesn't exist
             const initialProfile = {
@@ -145,21 +156,31 @@ export default function SubscriptionHub() {
               joinedAt: new Date().toISOString()
             };
             setDoc(doc(db, 'users', currentUser.uid), initialProfile)
-              .then(() => setUserProfile(initialProfile))
-              .catch(err => console.error("Error creating user profile:", err));
+              .then(() => {
+                setUserProfile(initialProfile);
+                setAuthLoading(false);
+              })
+              .catch(err => {
+                console.error("Error creating user profile:", err);
+                setAuthLoading(false);
+              });
           }
         }, (error) => {
           handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+          setAuthLoading(false);
         });
-
-        return () => unsubProfile();
       } else {
         setUserProfile(null);
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubProfile) {
+        unsubProfile();
+      }
+    };
   }, []);
 
   // Handle Free Trial Sign Up
@@ -341,7 +362,8 @@ export default function SubscriptionHub() {
     if (planName === 'Free Trial') {
       try {
         await updateDoc(doc(db, 'users', user.uid), {
-          plan: 'Free Trial'
+          plan: 'Free Trial',
+          joinedAt: new Date().toISOString()
         });
         addToast('Activated plan: Free Trial!', 'success', 3000);
       } catch (err: any) {
@@ -640,12 +662,12 @@ export default function SubscriptionHub() {
                     </span>
                   )}
                 </div>
-                <h3 className="text-base font-bold text-white font-display">14-Day Free Trial</h3>
+                <h3 className="text-base font-bold text-white font-display">7-Day Free Trial</h3>
                 <p className="text-[11px] text-gray-400 mt-1">Full-featured sandbox access for testing executive intelligence.</p>
                 
                 <div className="my-5 flex items-baseline gap-1">
                   <span className="text-2xl font-bold font-display text-white">$0.00</span>
-                  <span className="text-[10px] text-gray-500">/ 14 days</span>
+                  <span className="text-[10px] text-gray-500">/ 7 days</span>
                 </div>
 
                 <div className="space-y-2.5 border-t border-white/5 pt-4">
@@ -720,14 +742,24 @@ export default function SubscriptionHub() {
               <div className="pt-6">
                 <button
                   id="monthly-subscription-btn"
-                  onClick={() => selectPlan('Monthly Subscription ($29.99)')}
-                  className={`w-full py-2 rounded text-[10px] font-bold font-mono uppercase tracking-wide transition-all cursor-pointer ${
+                  onClick={() => selectPlan('Monthly Subscription ($29.99)', monthlyPriceId)}
+                  disabled={checkoutLoading !== null}
+                  className={`w-full py-2 rounded text-[10px] font-bold font-mono uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     userProfile?.plan === 'Monthly Subscription ($29.99)'
                     ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
                     : 'bg-brand-primary hover:bg-brand-hover text-white border border-brand-primary/20'
-                  }`}
+                  } ${checkoutLoading !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {userProfile?.plan === 'Monthly Subscription ($29.99)' ? 'Active Plan' : 'Subscribe Monthly'}
+                  {checkoutLoading === 'Monthly Subscription ($29.99)' ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading Checkout...</span>
+                    </>
+                  ) : userProfile?.plan === 'Monthly Subscription ($29.99)' ? (
+                    'Active Plan'
+                  ) : (
+                    'Subscribe Monthly'
+                  )}
                 </button>
               </div>
             </div>
@@ -780,18 +812,42 @@ export default function SubscriptionHub() {
               <div className="pt-6">
                 <button
                   id="yearly-subscription-btn"
-                  onClick={() => selectPlan('Yearly Subscription ($299.99)')}
-                  className={`w-full py-2 rounded text-[10px] font-bold font-mono uppercase tracking-wide transition-all cursor-pointer ${
+                  onClick={() => selectPlan('Yearly Subscription ($299.99)', yearlyPriceId)}
+                  disabled={checkoutLoading !== null}
+                  className={`w-full py-2 rounded text-[10px] font-bold font-mono uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     userProfile?.plan === 'Yearly Subscription ($299.99)'
                     ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30'
                     : 'bg-amber-500 hover:bg-amber-600 text-black font-extrabold border border-amber-500/20'
-                  }`}
+                  } ${checkoutLoading !== null ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  {userProfile?.plan === 'Yearly Subscription ($299.99)' ? 'Active Plan' : 'Subscribe Yearly'}
+                  {checkoutLoading === 'Yearly Subscription ($299.99)' ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Loading Checkout...</span>
+                    </>
+                  ) : userProfile?.plan === 'Yearly Subscription ($299.99)' ? (
+                    'Active Plan'
+                  ) : (
+                    'Subscribe Yearly'
+                  )}
                 </button>
               </div>
             </div>
 
+          </div>
+
+          {/* Sandbox & Cookie Disclaimer Notice */}
+          <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs leading-relaxed text-gray-300 space-y-1">
+            <h4 className="font-bold text-blue-400 font-display flex items-center gap-1.5 uppercase tracking-wide text-[11px]">
+              <Lock className="w-4 h-4 text-blue-400" />
+              <span>Sandbox Privacy & Cookie-Free Operational Security</span>
+            </h4>
+            <p>
+              To ensure 100% execution compatibility inside sandboxed preview frames (which frequently block cross-site cookies), this CRM Billing portal has been optimized to be **fully cookie-free**. 
+            </p>
+            <p className="text-gray-400">
+              User identity and active plan status are safely resolved utilizing standard secure tokens inside **IndexedDB & Local Storage**. There are no cookie dependencies, enabling seamless login, trial registration, and secure Stripe billing redirects.
+            </p>
           </div>
 
           {/* Verification Warning for first time email auth */}
@@ -813,7 +869,7 @@ export default function SubscriptionHub() {
             <p className="text-xs text-gray-400 mt-1">
               {selectedPendingPlan 
                 ? `Sign up to complete your subscription to: ${selectedPendingPlan}` 
-                : 'Start your risk-free 14-day Free Trial instantly.'}
+                : 'Start your risk-free 7-day Free Trial instantly.'}
             </p>
           </div>
 

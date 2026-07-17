@@ -23,7 +23,8 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
     setLoading('trial');
     try {
       await updateDoc(doc(db, 'users', user.uid), {
-        plan: 'Free Trial'
+        plan: 'Free Trial',
+        joinedAt: new Date().toISOString()
       });
     } catch (err) {
       console.error('Error activating trial from paywall:', err);
@@ -84,7 +85,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
           Unlock {tabName}
         </h2>
         <p className="text-xs md:text-sm text-gray-400 max-w-lg mx-auto leading-relaxed">
-          The operation you are trying to access requires an active corporate subscription. Instantly activate a 14-day free trial or subscribe to one of our competitive pricing tiers to unlock unlimited access.
+          The operation you are trying to access requires an active corporate subscription. Instantly activate a 7-day free trial or subscribe to one of our competitive pricing tiers to unlock unlimited access.
         </p>
       </div>
 
@@ -194,7 +195,7 @@ export default function PremiumPaywall({ user, userProfile, onNavigateToBilling,
       <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10 border-t border-white/5 pt-6 w-full max-w-2xl justify-between text-xs">
         <div className="text-center sm:text-left">
           <p className="text-gray-400">First time trying AI-BOS?</p>
-          <p className="text-[10px] text-gray-500 font-mono mt-0.5">Unlock a fully functional 14-day trial, no credit card required.</p>
+          <p className="text-[10px] text-gray-500 font-mono mt-0.5">Unlock a fully functional 7-day trial, no credit card required.</p>
         </div>
 
         <div className="flex items-center gap-3">
