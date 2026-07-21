@@ -694,10 +694,10 @@ app.post('/api/stripe/create-portal-session', async (req, res) => {
 
 /*
 ========================================
-WEBHOOK (User Format)
+WEBHOOKS (Unified Handler supporting /api/stripe-webhook and /webhook)
 ========================================
 */
-app.post("/api/stripe-webhook", async (req: any, res) => {
+const handleStripeWebhook = async (req: any, res: any) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -719,36 +719,60 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
       webhookSecret
     );
   } catch (err: any) {
-    console.error(`Webhook Error: ${err.message}`);
+    console.error(`❌ Webhook Signature Verification Failed: ${err.message}`);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+  // Handle the specific events enabled in your Stripe dashboard
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object as any;
       const email = session.metadata?.email || session.customer_email || session.customer_details?.email;
       const planName = session.metadata?.planName || 'Monthly Subscription ($29.99)';
       const subscriptionId = session.subscription;
-      console.log(`Subscription activated for ${email} -> ${planName} (ID: ${subscriptionId})`);
+      console.log(`💰 Checkout completed for session: ${session.id}`);
       if (email) {
         await updateUserPlanByEmail(email, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subscriptionId);
       }
       break;
     }
 
-    case "invoice.payment_succeeded": {
-      const invoice = event.data.object as any;
-      const email = invoice.customer_email || invoice.customer_name;
-      console.log(`Payment successful for invoice of customer: ${email}`);
+    case "customer.subscription.created": {
+      const subCreated = event.data.object as any;
+      console.log(`🆕 Subscription created: ${subCreated.id}`);
+      try {
+        const customerId = subCreated.customer;
+        const stripe = getStripeClient();
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const email = customer.email;
+        const priceId = subCreated.items?.data?.[0]?.price?.id;
+        let planName = 'Monthly Subscription ($29.99)';
+        if (priceId === process.env.STRIPE_PRICE_ID_KEY_YEARLY) {
+          planName = 'Yearly Subscription ($299.99)';
+        }
+        if (email) {
+          await updateUserPlanByEmail(email, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subCreated.id);
+        }
+      } catch (err: any) {
+        console.error("Error handling customer.subscription.created webhook:", err);
+      }
       break;
     }
 
-    case "invoice.payment_failed": {
-      const invoice = event.data.object as any;
-      const email = invoice.customer_email;
-      console.log(`Payment failed for customer: ${email}`);
-      if (email) {
-        await updateUserPlanByEmail(email, 'None');
+    case "customer.subscription.deleted": {
+      const subDeleted = event.data.object as any;
+      console.log(`😢 Subscription ended: ${subDeleted.id}`);
+      try {
+        const customerId = subDeleted.customer;
+        const stripe = getStripeClient();
+        const customer = await stripe.customers.retrieve(customerId) as any;
+        const email = customer.email;
+        console.log(`Subscription cancelled for customer ID: ${customerId} (${email})`);
+        if (email) {
+          await updateUserPlanByEmail(email, 'None', 'inactive', 'none', '');
+        }
+      } catch (err: any) {
+        console.error("Error handling customer.subscription.deleted webhook:", err);
       }
       break;
     }
@@ -767,7 +791,7 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
         }
         console.log(`Subscription updated for customer ID: ${customerId} (${email}) to: ${planName}`);
         if (email) {
-          await updateUserPlanByEmail(email, planName);
+          await updateUserPlanByEmail(email, planName, 'active', planName.toLowerCase().includes('year') ? 'yearly' : 'monthly', subscription.id);
         }
       } catch (err: any) {
         console.error("Error handling customer.subscription.updated webhook:", err);
@@ -775,26 +799,48 @@ app.post("/api/stripe-webhook", async (req: any, res) => {
       break;
     }
 
-    case "customer.subscription.deleted": {
-      const subscription = event.data.object as any;
+    case "invoice.paid": {
+      const invoicePaid = event.data.object as any;
+      console.log(`✅ Invoice paid: ${invoicePaid.id}`);
       try {
-        const customerId = subscription.customer;
-        const stripe = getStripeClient();
-        const customer = await stripe.customers.retrieve(customerId) as any;
-        const email = customer.email;
-        console.log(`Subscription cancelled for customer ID: ${customerId} (${email})`);
+        const email = invoicePaid.customer_email;
+        const subscriptionId = invoicePaid.subscription;
         if (email) {
-          await updateUserPlanByEmail(email, 'None');
+          let planName = 'Monthly Subscription ($29.99)';
+          await updateUserPlanByEmail(email, planName, 'active', 'monthly', subscriptionId);
         }
       } catch (err: any) {
-        console.error("Error handling customer.subscription.deleted webhook:", err);
+        console.error("Error handling invoice.paid webhook:", err);
       }
       break;
     }
+
+    case "invoice.payment_succeeded": {
+      const invoice = event.data.object as any;
+      const email = invoice.customer_email || invoice.customer_name;
+      console.log(`Payment successful for invoice of customer: ${email}`);
+      break;
+    }
+
+    case "invoice.payment_failed": {
+      const invoiceFailed = event.data.object as any;
+      console.log(`⚠️ Invoice payment failed: ${invoiceFailed.id}`);
+      const email = invoiceFailed.customer_email;
+      if (email) {
+        await updateUserPlanByEmail(email, 'None', 'inactive', 'none', '');
+      }
+      break;
+    }
+
+    default:
+      console.log(`Unhandled event type ${event.type}`);
   }
 
   res.json({ received: true });
-});
+};
+
+app.post("/api/stripe-webhook", handleStripeWebhook);
+app.post("/webhook", handleStripeWebhook);
 
 // Bootstrap development or production mode
 async function startServer() {
